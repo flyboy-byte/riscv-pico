@@ -1,0 +1,127 @@
+# CLAUDE.md
+
+Guidance for Claude Code (claude.ai/code) working in this repository.
+
+**Status: staging (2026-08-15).** Both upstreams are vendored and buildable. Nothing merged or
+ported yet. See [PLAN.md](PLAN.md) for current state and what's next — that's the living document,
+this one is orientation.
+
+## What this repo is
+
+A workbench for getting RISC-V Linux onto a Raspberry Pi Pico. Two upstream projects solving the
+same problem are vendored side by side so they can be compared, hacked, and eventually combined.
+The intended direction (see PLAN.md) is **fork `pico-rv32ima`, port `pico-linux`'s features into
+it** — not a 50/50 merge.
+
+Hardware this is actually being built for: **Pico (RP2040)**, **ST7735 128×160 LCD**, a couple of
+hand-soldered **SPI PSRAM chips on DIP adapters** of uncertain condition, and an SD card.
+
+## Layout
+
+Everything under `upstream/` is a `git subtree` with full upstream history. **Treat it as
+pristine** until the plan says otherwise — the point of this repo is that both projects stay
+readable as themselves.
+
+```
+upstream/pico-rv32ima/                 tvlad1234/pico-rv32ima      (maintained; RP2040+RP2350, VGA)
+upstream/pico-rv32ima/tiny-rv32ima/    tvlad1234/tiny-rv32ima      (emulator core library)
+upstream/pico-linux/                   ElectroBoy404NotFound/...   (2023 fork; LCD, multi-chip PSRAM)
+```
+
+Pulling upstream changes later:
+
+```sh
+git subtree pull --prefix=upstream/pico-rv32ima https://github.com/tvlad1234/pico-rv32ima main
+git subtree pull --prefix=upstream/pico-rv32ima/tiny-rv32ima https://github.com/tvlad1234/tiny-rv32ima main
+git subtree pull --prefix=upstream/pico-linux https://github.com/ElectroBoy404NotFound/pico-linux main
+```
+
+**`tiny-rv32ima` is a subtree, not a submodule.** Upstream has it as a submodule; the pointer was
+removed (commit "Drop tiny-rv32ima submodule pointer") and replaced with a real subtree at the same
+path, so `pico-rv32ima`'s CMake reference `../tiny-rv32ima/...` still resolves. Don't re-add
+`.gitmodules` or run `git submodule update` here — there are no submodules.
+
+## Commands
+
+```sh
+# SDK (once) — ~65 MB shallow
+git clone -b 2.1.1 --depth 1 https://github.com/raspberrypi/pico-sdk.git ~/pico-sdk
+git -C ~/pico-sdk submodule update --init --depth 1 lib/tinyusb
+
+# build either project, from its own directory
+cmake -B build -DPICO_SDK_PATH=$HOME/pico-sdk -DPICO_BOARD=pico
+cmake --build build -j$(nproc)
+```
+
+Verified 2026-08-15: `upstream/pico-rv32ima` builds clean on GCC 16.1 / SDK 2.1.1 → 140 KB `.uf2`.
+There are no tests; verification is flashing and reading the console boot log.
+
+## How the two differ
+
+Assumptions do not transfer between them.
+
+| | `pico-rv32ima` | `pico-linux` |
+| --- | --- | --- |
+| Config | `pico-rv32ima/hw_config.h` + `vm_config.h` | `pico-rv32ima/config/rv32_config.h` |
+| Emulator core | `tiny-rv32ima/` subtree | vendored in `pico-rv32ima/emulator/` |
+| PSRAM | 1 chip, 8 MB | 2 chips, 16 MB (supports 3–4) |
+| SD | Petit FatFs, SPI only | full FatFS, SPI **or** SDIO |
+| Console | USB-CDC + VGA (PIO) + PS/2 | UART + USB-CDC + ST7735 LCD + PS/2 |
+| SD contents | `IMAGE` + `DTB` + `ROOTFS` | single `Image` |
+| Targets | RP2040 + RP2350 | RP2040 only |
+| Upstream | active (Aug 2025) | abandoned (Feb 2024) |
+
+Shared: core 0 sets clocks and loops on `console_task()`; **core 1 runs the emulator**. Both are
+`copy_to_ram` binaries. **Both deliberately overvolt and overclock** (400 MHz / 438 MHz) — that is
+load-bearing for emulator throughput, not a bug. Flag it, don't "fix" it.
+
+## Things that will bite you
+
+- **Config headers are the truth, not the READMEs.** Pin assignments are compiled in, and the
+  READMEs disagree with the headers in places.
+- **`rv32_config.h` has `#if` interlocks.** Its "Config Checks" block `#error`s if `EMULATOR_RAM_MB`
+  exceeds the enabled chip count, and silently force-disables the LCD console for 3–4 chip setups.
+  Read the bottom of the file before changing a knob.
+- **`initPSRAM()` is a chip tester.** It reads each chip's JEDEC ID and checks the "known good die"
+  byte `0x5D`, returning `-1`/`-2` for the failing chip or a positive SPI clock in MHz on success
+  (`upstream/pico-linux/pico-rv32ima/psram/psram.c`). This is the fastest way to grade
+  hand-soldered chips. It proves the chip responds — it does not walk all 8 MB.
+- **`PSRAM_SPI_SPEED 52` is optimistic for flying leads.** Drop to ~20 MHz for bring-up; a chip that
+  fails at 52 and passes at 20 is a signal-integrity problem, not a dead chip.
+- **`pico-linux` vendors ~42k lines of third-party library** (`no-OS-FatFS-SD-SPI-RPi-Pico`,
+  `pico-displayDrivs`, `pico-ps2Driv`) — about 95% of it by volume. Actual original code in each
+  project is ~2,000 lines. Prefer changing the app layer.
+
+## Desktop testing: read this before trying
+
+Running the emulator on a desktop is the right way to iterate, but there's a catch that costs an
+afternoon if you don't know it.
+
+`cnlohr/mini-rv32ima` builds natively in seconds (~916 KB clone, 30 KB binary) and boots cnlohr's
+own images fine. **But neither project's images boot under it**, and it's not a broken image — the
+kernel executes correctly (verified by single-stepping; entry `0x80000000`, CSR setup, `fence.i`,
+normal early startup) but produces no console output.
+
+The reason: **`tiny-rv32ima` is not stock mini-rv32ima.** It adds custom CSRs in
+`tiny-rv32ima/emulator/emulator.c:396-470`:
+
+| CSR | Purpose |
+| --- | --- |
+| `0x151`–`0x154` | block device — RAM pointer, seek offset, transfer size, read/write trigger |
+| `0x150`, `0x155` | block size, error status |
+| `0x170` | hibernate / snapshot |
+
+That block-device interface *is* `root=fe00`. Stock mini-rv32ima returns 0 for all of it, so the
+kernel comes up with no root device and dies before the console is usable.
+
+**The fix, when wanted:** build a desktop harness from `tiny-rv32ima` itself rather than from
+stock mini-rv32ima. Its five `hal_*.h` headers are one-line macros — swap them for desktop versions
+(`console`→stdio, `psram`→`malloc`, `sd`→a real file behind `pff`, `timing`→`clock_gettime`) and
+compile `emulator.c` + `cache.c` + `pff` natively. Roughly 150 lines of glue, and it yields a
+desktop build of the *exact* emulator the firmware runs, with a working block device.
+
+## Scope fence
+
+This is a hardware bring-up and porting workbench. Don't turn it into a framework, a build system,
+or a general-purpose emulator project. Don't add CI, package manifests, or abstraction layers that
+nobody asked for. The upstream trees stay pristine until PLAN.md says a port has started.
