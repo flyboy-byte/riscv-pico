@@ -1,0 +1,16 @@
+# Pico SDK / CMake build output
+build/
+build_debug/
+*.uf2.bak
+
+# VS Code
+.vscode/
+
+# Downloaded kernel/rootfs images (large, fetched from upstream releases)
+images/
+*.zip
+
+# buildroot trees (pico-linux)
+upstream/pico-linux/linux/buildroot
+upstream/pico-linux/linux/c4/c4src
+upstream/pico-linux/linux/output
