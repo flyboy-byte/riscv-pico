@@ -4,6 +4,10 @@ Living state document. Current reality, not a task list.
 
 **Status: staging — both upstreams vendored and buildable, nothing ported yet (2026-08-15)**
 
+**Next session starts here:** desktop harness design is fully scoped (see "Desktop harness —
+promoted to next up" below) but zero code written. Don't re-investigate the HAL surface — it's all
+documented. Just start writing `harness/`.
+
 ## Where things actually stand
 
 - ✅ Pico SDK 2.1.1 at `~/pico-sdk` (shallow + tinyusb only, 65 MB). Builds clean on GCC 16.1.
@@ -79,6 +83,53 @@ Ordered so the risky unknowns resolve first and nothing depends on the display w
 
 Optional but high-leverage, can slot in any time after step 3: **the desktop harness**
 (see CLAUDE.md) — makes steps 4–5 iterable without touching hardware.
+
+### Desktop harness — promoted to next up (2026-08-15)
+
+Chips are hand-soldered and buried; hardware bring-up is a hassle right now. Decided to build the
+desktop harness *before* step 1, not after step 3 — get the emulator itself booting on this machine
+first, since none of that work needs the physical Pico at all.
+
+Design is scoped, not yet written (ran out of session budget mid-investigation — pick this up fresh
+rather than mid-context). What's already known, so it isn't re-derived:
+
+- `tiny-rv32ima` compiles as five source files against five `hal_*.h` seams:
+  `emulator/emulator.c`, `cache/cache.c`, `pff/pff.c`, plus **either** `psram/psram.c` (real) or a
+  desktop replacement, **either** `pff/mmcbbp.c` (real SD-over-SPI) or a desktop `diskio.c`.
+- `hal_console.h`, `hal_csr.h`, `hal_timing.h` are trivial to stub for desktop (stdio putc/getc,
+  no-op custom CSRs, `clock_gettime`). `console.h` (from `pico-rv32ima/pico-rv32ima/console/`) needs
+  a matching desktop version providing `console_putc`, `console_puts`, `console_panic`,
+  `console_available`/`console_read` (backed by a queue or just stdin).
+- **PSRAM**: don't bother faking real SPI. `psram.c`'s four hal macros
+  (`psram_select`/`psram_deselect`/`psram_spi_write`/`psram_spi_read`) can be reimplemented in a
+  desktop `hal_psram.h` as a tiny state machine over one `malloc`'d buffer (size = `EMULATOR_RAM_MB`
+  from `vm_config.h`): first `psram_spi_write` after `psram_select()` is always the
+  cmd+24-bit-address prefix (parse `buf[0]` as cmd, `buf[1..3]` as address); a later
+  `psram_spi_write`/`psram_spi_read` is the payload, memcpy'd to/from `malloc_buf + addr`. One
+  special case: cmd `0x9F` (READ_ID) must make the read return `buf[1] == 0x5D` (the KGD byte) so
+  `psram_read_kgd()` passes. This header is only ever included by `psram.c`, so the state can be
+  file-static — no multi-TU issues. Confirmed `cache.c` only calls `psram_access()`, never the hal
+  macros directly, so this is the *only* place SPI needs faking.
+- **SD/pff**: don't try to fake the MMC-over-SPI protocol in `mmcbbp.c` at all — skip compiling it.
+  `pff.c` only depends on `diskio.h`'s three functions (`disk_initialize`, `disk_readp`,
+  `disk_writep`), which are protocol-agnostic. Write a from-scratch desktop `diskio.c` that opens a
+  raw FAT image file (the same SD card image structure `IMAGE`/`DTB`/`ROOTFS` would use, or reuse the
+  images already downloadable via the README's `gh release download` command) and serves sectors
+  with `fseek`/`fread`/`fwrite` directly. No SD emulation needed.
+- **Entry point**: `tiny-rv32ima/emulator/emulator.h` exposes exactly `start_vm(prev_power_state)`
+  and `vm_init_hw(void)` — a desktop `main.c` just calls `vm_init_hw()` then
+  `start_vm(EMU_GET_SD)` (mirrors what `pico-rv32ima/pico-rv32ima/main.c` does on core 1).
+  `vm_init_hw()` calls `psram_init()` and `pf_mount()` and panics via `console_panic()` on failure —
+  good early signal once the harness compiles.
+- Needs its own `vm_config.h` (RAM size, filenames, cache line/set sizing — copy pico-rv32ima's and
+  trim) since `emulator.c` and `cache.c` both `#include "vm_config.h"` unqualified.
+- Where to put it: a new top-level `harness/` directory in *this* repo (not under `upstream/`) with
+  its own tiny CMakeLists or even a flat `gcc` command — compiles
+  `tiny-rv32ima/{emulator,cache,pff}/{emulator,cache,pff}.c` from `upstream/pico-rv32ima/tiny-rv32ima/`
+  plus harness-local `hal_console.h`, `hal_csr.h`, `hal_timing.h`, `hal_psram.h`, `console.h`,
+  `console.c`, `diskio.c`, `vm_config.h`, `main.c`. Does not touch upstream trees at all — D-003
+  (pristine upstream) still holds.
+- Rough size estimate still holds: ~150-200 lines of new glue code total, all in `harness/`.
 
 ## Decisions already made (do not re-ask)
 
