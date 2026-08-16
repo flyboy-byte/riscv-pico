@@ -1,26 +1,83 @@
 # riscv-pico
 
 A workbench for running 32-bit RISC-V Linux on a Raspberry Pi Pico, by emulating a RISC-V CPU on
-the RP2040 with SPI PSRAM as system memory and an SD card holding the kernel and rootfs.
+the RP2040 with SPI PSRAM as system memory and an SD card holding the kernel and rootfs. Built
+around two vendored upstream projects, a desktop emulator for iterating without hardware, and a
+real cross-compile toolchain for writing and running your own programs on it.
 
-**Status: staging.** Both upstream projects are vendored here, intact and buildable. Nothing has
-been merged, ported, or modified yet. That's deliberate — this repo exists so the two can be
-compared and hacked on side by side before any of it gets mashed together.
+**Status: real software, not just vendored reference.** Both upstreams are here with full history.
+A multi-chip PSRAM port has landed (software-verified; real hardware is parked for now). A desktop
+emulator boots the actual firmware's Linux kernel with zero hardware in about a second, with a real
+terminal app to drive it. A working cross-compiler for this exact target has been used to write and
+run real programs, including a Tiny BASIC interpreter. See [PLAN.md](PLAN.md) for the full living
+state — this file is the tour, that one is the detail.
 
 ## What's in here
 
-| Path | Upstream | Notes |
+| Path | What | Notes |
 | --- | --- | --- |
-| `upstream/pico-rv32ima/` | [tvlad1234/pico-rv32ima](https://github.com/tvlad1234/pico-rv32ima) | Actively maintained. RP2040 **and** RP2350, VGA console, snapshot support. |
-| `upstream/pico-rv32ima/tiny-rv32ima/` | [tvlad1234/tiny-rv32ima](https://github.com/tvlad1234/tiny-rv32ima) | The emulator core, extracted into a library by upstream's 2025 refactor. |
-| `upstream/pico-linux/` | [ElectroBoy404NotFound/pico-linux](https://github.com/ElectroBoy404NotFound/pico-linux) | A 2023 fork that went its own way. ST7735 LCD console, 2–4 PSRAM chips, SDIO. Last touched Feb 2024. |
+| `upstream/pico-rv32ima/` | [tvlad1234/pico-rv32ima](https://github.com/tvlad1234/pico-rv32ima) | The fork this project builds on. No longer pristine — the PSRAM port lives here. |
+| `upstream/pico-rv32ima/tiny-rv32ima/` | [tvlad1234/tiny-rv32ima](https://github.com/tvlad1234/tiny-rv32ima) | The emulator core. Also edited (same port). |
+| `upstream/pico-linux/` | [ElectroBoy404NotFound/pico-linux](https://github.com/ElectroBoy404NotFound/pico-linux) | Reference only, still pristine. ST7735 LCD console, 2–4 PSRAM chips, SDIO — source of the PSRAM port logic. |
+| `harness/` | This project's own code | Desktop build of the real emulator core (no hardware) plus a PyQt6 terminal app to drive it. |
+| `apps/` | This project's own code | Small C programs cross-compiled for the target and proven running on it. |
 
-All three are `git subtree`s with full upstream history, so `git log -- upstream/<x>` works and
-upstream changes can still be pulled. See [CLAUDE.md](CLAUDE.md) for the exact commands.
+All three `upstream/` paths are `git subtree`s with full history, so `git log -- upstream/<x>`
+works and upstream changes can still be pulled. See [CLAUDE.md](CLAUDE.md) for the exact commands.
 
 Everything ultimately descends from [CNLohr's mini-rv32ima](https://github.com/cnlohr/mini-rv32ima).
 
-## Building
+## Running it without any hardware
+
+The fastest way to actually see this thing work. Build the emulator:
+
+```sh
+TINY=upstream/pico-rv32ima/tiny-rv32ima
+gcc -O1 -g -Wall -I harness -I $TINY/emulator -I $TINY/psram -I $TINY/cache -I $TINY/pff \
+  harness/main.c harness/console.c harness/diskio.c \
+  $TINY/emulator/emulator.c $TINY/cache/cache.c $TINY/psram/psram.c $TINY/pff/pff.c \
+  -o harness/rv32harness
+```
+
+Build a FAT test image (needs `mtools`, no root required) with a kernel from the
+[buildroot-tiny-rv32ima](https://github.com/tvlad1234/buildroot-tiny-rv32ima) releases:
+
+```sh
+gh release download v1.0 --repo tvlad1234/buildroot-tiny-rv32ima --pattern images.zip
+mkdir images && cd images && unzip ../images.zip && cd ..
+dd if=/dev/zero of=harness/disk.img bs=1M count=80
+mformat -F -i harness/disk.img ::
+mcopy -i harness/disk.img images/Image ::IMAGE
+mcopy -i harness/disk.img images/dtb   ::DTB
+mcopy -i harness/disk.img images/rootfs ::ROOTFS
+```
+
+Run it in a real desktop terminal app (needs `PyQt6` and `python-pyte` — `sudo pacman -S
+python-pyte` on Arch):
+
+```sh
+python3 harness/desktop_terminal.py harness/disk.img
+```
+
+Boots to a Linux shell in a couple seconds. Full details, including how the desktop harness fakes
+PSRAM/SD without real hardware, are in PLAN.md's "Desktop harness" and "Desktop terminal app"
+sections.
+
+**These downloaded images don't boot under stock desktop `mini-rv32ima`** — see
+[CLAUDE.md](CLAUDE.md) for why (short version: this firmware's emulator core isn't stock
+mini-rv32ima, it has custom block-device CSRs). `harness/rv32harness` above is this repo's own
+desktop build of the *real* core, which does work.
+
+## Writing and running your own programs
+
+A real cross-compiler for this target (`riscv32-buildroot-linux-uclibc-gcc`, produces the `bFLT`
+no-MMU binary format this kernel needs) has been built and proven — see `apps/` for working
+examples (`hello.c`, a Tiny BASIC interpreter in `basic.c`). The toolchain itself isn't checked in
+(it's a real buildroot build, doesn't belong in git), but the exact rebuild recipe — including two
+real gotchas already solved so you don't have to re-discover them — is in PLAN.md's "Cross-compile
+toolchain" section.
+
+## Building the firmware for real hardware
 
 Needs the Pico SDK. A shallow clone with just the tinyusb submodule is ~65 MB:
 
@@ -39,23 +96,12 @@ cmake --build build -j$(nproc)
 Output is `build/pico-rv32ima/pico-rv32ima.uf2` (~140 KB) in both. Flash by holding BOOTSEL while
 plugging in the Pico — it mounts as a USB drive called `RPI-RP2` — then copy the `.uf2` onto it.
 
-Verified building clean with GCC 16.1 / SDK 2.1.1, 2026-08-15.
-
-## Kernel images
-
-`pico-rv32ima` wants three files in the root of a FAT16/FAT32 SD card — `IMAGE`, `DTB`, `ROOTFS` —
-from the [buildroot-tiny-rv32ima](https://github.com/tvlad1234/buildroot-tiny-rv32ima) releases:
-
-```sh
-gh release download v1.0 --repo tvlad1234/buildroot-tiny-rv32ima --pattern images.zip
-```
-
-`pico-linux` instead wants a single `Image` file, and already ships one at
+`pico-rv32ima` wants `IMAGE`/`DTB`/`ROOTFS` in the root of a FAT16/FAT32 SD card (same images as
+above). `pico-linux` instead wants a single `Image` file, already shipped at
 `upstream/pico-linux/linux/Image`.
 
-**These images do not boot under stock desktop `mini-rv32ima`** — see [CLAUDE.md](CLAUDE.md) for
-why. They do boot under `harness/`, this repo's own desktop build of the real `tiny-rv32ima` core
-(no hardware needed) — see PLAN.md's "Desktop harness" section for build/run steps.
+Real hardware bring-up (flashing, PSRAM chip testing) is parked for now — this project's current
+focus is the emulator/toolchain side, which needs none of it.
 
 ## Licenses
 
