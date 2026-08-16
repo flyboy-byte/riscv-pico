@@ -2,8 +2,13 @@
 
 Living state document. Current reality, not a task list.
 
-**Status: multi-chip PSRAM port done in software, desktop harness boots to a Linux shell, real
-hardware parked until further notice (2026-08-15)**
+**Status: full cross-compile pipeline proven — wrote, compiled, and ran a real program in the
+harness. Multi-chip PSRAM port done in software. Real hardware parked until further notice.
+(2026-08-15)**
+
+**Next session starts here:** toolchain needs rebuilding (lives in ephemeral scratchpad, recipe
+below is fully de-risked — should go straight through this time). Then pick a utility to compile:
+text editor, tiny BASIC, Lua, or a terminal game — all discussed, none started.
 
 **Desktop harness works.** `harness/` boots the real tiny-rv32ima emulator (custom CSRs and all) to
 a Linux shell prompt natively on this machine — see "Desktop harness" section below for how to run
@@ -175,6 +180,93 @@ This validates the *software* side of the multi-chip PSRAM port (RAM sizing, cac
 chip-select logic, which only matters on hardware. `ADDR_BITS` in `cache.c` is hardcoded to 24 and
 was not touched; 16 MB is the max this cache addressing supports without a further change.
 
+### Idea, parked: throttle the harness to real hardware speed (2026-08-15)
+
+Discussed, deliberately not built. The emulator core ties the guest's timer/jiffies to real
+elapsed wall-clock microseconds already (`EMULATOR_FIXED_UPDATE 0`, `EMULATOR_TIME_DIV 1` in
+`vm_config.h` — `start_vm()`'s main loop computes `elapsedUs` from `timing_micros()`, not from
+instruction count), so the guest kernel's *sense* of time is already realistic in both the harness
+and on hardware. What differs is throughput: the harness runs the same interpreter loop on a
+modern x86 host, so it executes far more guest instructions per real microsecond than an
+overclocked RP2040 running the same C interpreter would. Rate-limiting `start_vm()`'s
+instructions-per-flip loop against a target guest IPS would make the harness *feel* like real
+hardware speed-wise.
+
+Not done because: no real hardware benchmark exists yet to calibrate a target IPS against (hardware
+is parked), so any number picked now would be a guess, not data. It also wouldn't help find the
+class of bug hardware bring-up actually cares about — bad solder joints, SPI signal integrity,
+overvolt stability — those are physical, not timing artifacts, and no software throttle simulates
+them. Revisit once there's a real hardware IPS number to target; cheap to add then.
+
+### Cross-compile toolchain — built and proven, 2026-08-15 (must be rebuilt next session)
+
+Full working `riscv32-buildroot-linux-uclibc-gcc` 13.3.0 cross-toolchain built and used to compile
+and run a real "hello world" live in the harness/web console. **The build itself lives in the
+session's ephemeral scratchpad and will not survive to the next session** — this section is the
+exact recipe to redo it, now de-risked (every failure mode below is already solved, so a rebuild
+should go straight through without the trial-and-error this session had).
+
+**Why this needs a real buildroot build, not a distro cross-compiler:** the rootfs binaries
+(confirmed via `debugfs -R "dump ..." | file`) are **bFLT** (binary flat, no-MMU format), not
+regular ELF. A generic `riscv64-linux-gnu-gcc` from Arch's repos cannot produce these — only the
+project's own uClibc+no-MMU+elf2flt-equipped toolchain can.
+
+**Step 1 — host compiler.** This machine's system GCC (16.x) is too new to bootstrap GCC 13:
+GCC 16 hard-errors on implicit function declarations and defaults to C++20 (breaking old GCC's
+`u8""`-literal-using `libcody` code with `char8_t` type mismatches) — neither is fixable by flags
+alone, it cascades through multiple sub-configure scripts that don't inherit `CFLAGS`/`CXXFLAGS`
+overrides. **Fix: install `gcc12` from the AUR** (`yay -S gcc12` — installs version-suffixed
+`gcc-12`/`g++-12` alongside the system compiler, zero conflict, confirmed safe). Use it as the
+*host* compiler for the whole buildroot build; this sidesteps the entire class of problem in one
+shot rather than patching each mismatch as it surfaces.
+
+**Step 2 — get buildroot, configured for this target:**
+```sh
+git clone --depth 1 https://github.com/tvlad1234/buildroot-tiny-rv32ima.git repo
+cd repo
+make buildroot   # downloads buildroot 2024.05, applies tinyrv32ima_defconfig via BR2_EXTERNAL
+```
+
+**Step 3 — build just the toolchain** (not `make everything` — that also builds the kernel/rootfs/
+packages, which we don't need; `toolchain` is buildroot's own scoped target for exactly this):
+```sh
+cd buildroot
+make HOSTCC=gcc-12 HOSTCXX=g++-12 toolchain
+```
+Compiler ends up at `buildroot/output/host/bin/riscv32-buildroot-linux-uclibc-gcc`.
+
+**Step 4 — compile something:**
+```sh
+riscv32-buildroot-linux-uclibc-gcc -mabi=ilp32 -march=rv32ima -static -Wl,-elf2flt=-r -Os -s \
+  hello.c -o hello
+```
+Those exact flags come from the project's own `goodies/hello_linux/Makefile` — matching them
+matters, they're what makes `elf2flt` emit bFLT instead of a normal ELF binary. Verify with
+`file hello` → should say `BFLT executable`.
+
+**Step 5 — inject into the rootfs, no full rootfs rebuild needed.** The downloaded `rootfs` file
+(from the `images.zip` release asset — see README) is a raw ext2 image; write into it directly:
+```sh
+debugfs -w -R "write /path/to/hello usr/bin/hello" rootfs
+debugfs -w -R "sif usr/bin/hello mode 0100755" rootfs
+mcopy -o -i harness/disk.img rootfs ::ROOTFS   # sync into the FAT test image the harness boots
+```
+Then restart `harness/webconsole.py` (kill any old `rv32harness`/`webconsole.py` first — see
+"process hygiene" note below) and the new binary is runnable from the shell immediately.
+
+**Two hard-won gotchas, worth not re-learning:**
+- **Never run two `make toolchain` invocations against the same `output/` directory
+  concurrently.** This session did (by accident, via repeated background-task restarts) and it
+  silently corrupted the compiler's install step — `riscv32-buildroot-linux-uclibc-gcc.br_real`
+  ended up as a symlink pointing back to the wrapper script instead of the real compiler binary,
+  which only surfaced as a confusing `.br_real.br_real: No such file or directory` error several
+  stages later (during `uclibc` headers). The fix was a full `rm -rf output/build output/host` and
+  one clean single-threaded rebuild attempt. `pgrep` gave false negatives for whether old builds
+  were still running — trust `ps -eo pid,etime,cmd` instead when in doubt.
+- **Process hygiene for the harness/webconsole background processes generally**: always verify
+  with `ps`, not `pgrep -f`, before assuming something died or restarting it — this session
+  accumulated duplicate `rv32harness` processes the same way.
+
 ### Vision beyond the port (2026-08-15, from conversation — not yet scoped)
 
 Direction discussed: make this repo's distinguishing feature "runs without hardware," lean into
@@ -183,6 +275,14 @@ the rootfs to run under the harness (or real hardware) — not full desktop-app 
 userspace C binaries. Agreed ordering: the multi-chip PSRAM port and a hello-world cross-compile
 proof come *before* any rootfs/buildroot rework (nano, a real compiler) — those are a heavier,
 separate-session job (see below).
+
+**Proven end-to-end, 2026-08-15**: wrote `hello.c`, cross-compiled it, injected it into the rootfs,
+booted it in the harness, ran it live in the web console. The whole pipeline works. Next
+candidates discussed, not yet started, roughly in order of quick-win to impressive: a minimal
+text editor written from scratch (~150-300 lines, sidesteps the whole busybox-vi/buildroot-rootfs-
+rebuild question), a tiny BASIC interpreter, a Lua interpreter, a terminal game (snake/tetris, raw
+ANSI escapes, no curses needed). User wants to pick one (or more) next session — compiling takes
+real wall-clock time and today's already spent a lot of it on toolchain archaeology.
 
 ### Live web console (built, 2026-08-15)
 

@@ -100,7 +100,14 @@ load-bearing for emulator throughput, not a bug. Flag it, don't "fix" it.
 (`upstream/pico-rv32ima/tiny-rv32ima/{emulator,cache,pff}/*.c`, unmodified) against desktop
 replacements for the hardware HAL headers, and boots to a Linux shell natively on this machine —
 no Pico, no PSRAM chips, no SD card needed. Build/run instructions and how it works are in
-PLAN.md's "Desktop harness" section.
+PLAN.md's "Desktop harness" section. `harness/webconsole.py` adds a live browser console over it —
+watch it boot, type into it, or drive it from a script/`curl POST /input` — see PLAN.md.
+
+**A real RISC-V cross-compiler for this target has been built and proven** (compile → inject into
+rootfs → boot → run, live in the web console). It's not checked into the repo (lives in ephemeral
+build scratch, has to be rebuilt per session) — the exact recipe, plus two hard-won gotchas about
+not running concurrent `make toolchain` invocations, are in PLAN.md's "Cross-compile toolchain"
+section. Don't rediscover this from scratch — read that section first.
 
 Why this exists and not something built on stock `cnlohr/mini-rv32ima`: that builds natively in
 seconds too, and boots cnlohr's own images fine, but **not either project's** — `tiny-rv32ima` adds
