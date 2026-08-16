@@ -495,6 +495,33 @@ PICO_RP2350A` in `main.c`, `-DPICO_BOARD=pico2` build flag already documented in
 README/CLAUDE.md) — so this may be closer to "verify it builds and note the differences" than a
 real port. Not investigated further this session.
 
+### What can actually run on this — scope question, answered 2026-08-15
+
+Two different questions worth keeping separate:
+
+**"Can I cross-compile and run other userspace programs (MicroPython, etc.)?"** Yes in principle —
+the emulator boots a real, general-purpose Linux kernel, so anything cross-compiled for this exact
+target (`riscv32ima`, no-MMU, uClibc, bFLT) is fair game, not just things purpose-built for this
+project (`apps/hello.c`, `apps/basic.c` already prove the pipeline). MicroPython specifically means
+its **unix port** (compiles as a normal Linux userspace binary), not the microcontroller/bare-metal
+port. Real complexity, not a quick win like Tiny BASIC was: tens of thousands of lines vs. ~500,
+own build system to wrestle into this toolchain, and a genuine unconfirmed risk that its GC heap
+allocation assumes `mmap()`-backed paging, which doesn't really exist the same way under no-MMU
+Linux. Not attempted; would need scoping (check for hard `mmap` dependencies) before committing to
+it.
+
+**"Can the emulator run non-Linux firmware — is it Linux-only?"** Not hardcoded to Linux, but
+Linux is the only thing actually ported to it. The RV32IMA CPU core itself is general-purpose —
+any correctly-compiled RV32IMA code executes correctly as instructions. But the "hardware" around
+it (`tiny-rv32ima/emulator/emulator.c`) is a small, custom platform: fixed RAM offset, one
+UART-like console, a CLINT-style timer, and the project's own custom block-device CSRs — built
+specifically to run this nommu Linux port, nothing else. Existing firmware written for a real board
+or a different emulated platform (QEMU's "virt" machine, etc.) would **not** boot as-is — different
+memory map, different peripherals, no driver for this platform's specifics. Writing/porting
+bare-metal firmware that specifically targets *this* emulator's actual memory map (no OS at all,
+just RV32IMA instructions + the console CSR) is a real, different, and currently unexplored
+direction — not gated by anything in the emulator itself, just never attempted.
+
 ## Ruled out, with reasons
 
 - **Emulating the RP2040 to test this.** Investigated all four options — `rp2040js` (no SPI, single
