@@ -2,8 +2,8 @@
 
 Living state document. Current reality, not a task list.
 
-**Status: staging — both upstreams vendored and buildable, desktop harness boots to a Linux shell,
-nothing ported to hardware yet (2026-08-15)**
+**Status: multi-chip PSRAM port done in software, desktop harness boots to a Linux shell, real
+hardware parked until further notice (2026-08-15)**
 
 **Desktop harness works.** `harness/` boots the real tiny-rv32ima emulator (custom CSRs and all) to
 a Linux shell prompt natively on this machine — see "Desktop harness" section below for how to run
@@ -17,8 +17,10 @@ it. No hardware needed for any future PSRAM/cache/emulator-core iteration.
   to subtree at the same path, so upstream CMake paths still work.
 - ✅ Kernel images for `pico-rv32ima` downloaded and inspected (`images.zip` v1.0, 2025-08-27:
   `Image` 2.2 MB, `dtb` 2 KB, `rootfs` 60 MB ext2).
-- ❌ Nothing flashed to hardware yet.
-- ❌ Nothing ported between the two projects.
+- ❌ Nothing flashed to hardware yet — **parked, don't pick back up without being asked.**
+- ✅ Multi-chip PSRAM port — `pico-linux`'s address-based chip-select logic ported into
+  `pico-rv32ima`. Compiles clean for real RP2040 target in both 1-chip and 2-chip configs; default
+  config unchanged (1 chip, 8 MB) so nothing about current hardware behavior changed. See below.
 - ✅ Desktop harness — boots to a Linux shell, no hardware. See below.
 
 ## Hardware on hand
@@ -49,25 +51,43 @@ What's worth porting from `pico-linux`:
 Kept from upstream for free: RP2350 support, VGA console, snapshot/hibernate, rootfs as a block
 device, and the small `pff` instead of the 42k-line FatFS.
 
-### The multi-chip PSRAM seam
+### The multi-chip PSRAM port (done, 2026-08-15, `port/multi-chip-psram` branch)
 
-`tiny-rv32ima/psram/psram.c:44-66` — `psram_access()` already has the address in hand:
+Ported `pico-linux`'s address-based chip-select logic into `pico-rv32ima`. This is the first edit
+to the vendored upstream trees — D-003's stated exception point. Split the same way
+`pico-rv32ima`'s existing HAL already separates hardware from protocol, rather than copying
+`pico-linux`'s `accessPSRAM()` wholesale (which mixes both in one function):
 
-```c
-cmdAddr[1] = addr >> 16;   // address is right here
-...
-psram_select();            // ...but select takes no argument
-```
+- `pico-rv32ima/hw_config.h` — `PSRAM_TWO_CHIPS` (already existed as an unused stub, now wired up),
+  `PSRAM_SPI_PIN_S2` (GPIO14, free pin), `PSRAM_CHIP_SIZE_BYTES` (8 MB, both known-good chip models
+  are 8 MB). Added a config-check block (`#include`s `vm_config.h` to compare `EMULATOR_RAM_MB`
+  against enabled chip capacity, `#error`s on mismatch) — same pattern `pico-linux` uses, flagged in
+  this file as worth adopting back when this repo was first written.
+- `pico-rv32ima/main.c` — GPIO init for `PSRAM_SPI_PIN_S2`, gated behind `#if PSRAM_TWO_CHIPS`.
+- `pico-rv32ima/hal/hal_psram.h` — `psram_select`/`psram_deselect` now take the *full* address and
+  pick the CS pin (`psram_chip_cs()`, a one-line macro). This header owns pin muxing only.
+- `tiny-rv32ima/psram/psram.c` — `psram_access()` now computes a chip-local address
+  (`addr % PSRAM_CHIP_SIZE_BYTES` when two chips are enabled) for the command bytes it sends,
+  separate from the full address it passes to `psram_select()`. `psram_init()` now loops over each
+  enabled chip, resetting and KGD-checking each individually (previously only ever touched chip 1) —
+  matters for correctness once a second chip is wired, each physical chip needs its own reset over
+  its own CS line.
 
-and `pico-rv32ima/hal/hal_psram.h` hardcodes one chip:
-
-```c
-#define psram_select()   gpio_put(PSRAM_SPI_PIN_S1, false)
-```
-
-Fix: make selection address-aware — map `addr` → CS pin, subtract the chip's base offset. That
-logic already exists and works in `upstream/pico-linux/pico-rv32ima/psram/psram.c` (`accessPSRAM()`).
-Roughly 20 lines, transplanted into a cleaner seam.
+**Verified, not just written:**
+- Harness (single flat malloc'd buffer, `harness/hal_psram.h` updated to match the new
+  `psram_select(addr)`/`psram_deselect(addr)` signatures) still boots clean after the refactor —
+  confirms the single-chip path is behaviorally unchanged.
+- Real RP2040 target (`cmake --build`) compiles clean in **both** configs: default
+  (`PSRAM_TWO_CHIPS 0`, 8 MB) produced a byte-identical 140800-byte `.uf2` to before the port,
+  proving the default path truly didn't change; `PSRAM_TWO_CHIPS 1` + `EMULATOR_RAM_MB 16` also
+  compiles clean (141312 bytes).
+- The config-check guard actually fires: set `EMULATOR_RAM_MB 16` with `PSRAM_TWO_CHIPS 0` and got
+  a compile-time `#error`, not a silent address-wrap bug.
+- **Not verified and can't be from a desktop:** the real SPI chip-select GPIO behavior. That needs
+  a second physically-wired, graded-good chip — hardware is parked, so this stays unverified until
+  hardware work resumes.
+- Repo currently sits back on the safe default (1 chip, 8 MB) — nothing about current wiring's
+  expected behavior changed by this port landing.
 
 ## Next steps, in order
 
@@ -192,6 +212,13 @@ image is gitignored, build it locally per the steps above).
   `tiny-rv32ima` submodule pointer, which was replaced by a subtree at the same path. (2026-08-15)
 - **D-004** — Serial-first bring-up; the LCD is wired last. The previous attempt stalled partly by
   trying to bring up everything at once with no feedback until it all worked. (2026-08-15)
+- **D-005** — Real hardware work is parked indefinitely; focus is emulation-only until the user
+  explicitly says otherwise. Don't propose flashing, chip-testing, or wiring steps unprompted.
+  (2026-08-15)
+- **D-006** — Upstream trees are no longer pristine (D-003's exception point). The multi-chip PSRAM
+  port landed directly on `upstream/pico-rv32ima` and `upstream/pico-rv32ima/tiny-rv32ima` (on
+  branch `port/multi-chip-psram`). Future upstream `git subtree pull`s will need to merge through
+  local changes from here on — that's an accepted tradeoff, not an oversight. (2026-08-15)
 
 ## Ruled out, with reasons
 
