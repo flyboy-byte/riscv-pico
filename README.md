@@ -54,7 +54,8 @@ gh release download v1.0 --repo tvlad1234/buildroot-tiny-rv32ima --pattern image
 `upstream/pico-linux/linux/Image`.
 
 **These images do not boot under stock desktop `mini-rv32ima`** — see [CLAUDE.md](CLAUDE.md) for
-why, and what to do about it.
+why. They do boot under `harness/`, this repo's own desktop build of the real `tiny-rv32ima` core
+(no hardware needed) — see PLAN.md's "Desktop harness" section for build/run steps.
 
 ## Licenses
 

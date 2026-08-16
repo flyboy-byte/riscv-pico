@@ -6,6 +6,10 @@ build_debug/
 # VS Code
 .vscode/
 
+# Desktop harness build output and local test disk images
+harness/rv32harness
+harness/*.img
+
 # Downloaded kernel/rootfs images (large, fetched from upstream releases)
 images/
 *.zip

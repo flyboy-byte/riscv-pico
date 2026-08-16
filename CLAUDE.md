@@ -2,9 +2,10 @@
 
 Guidance for Claude Code (claude.ai/code) working in this repository.
 
-**Status: staging (2026-08-15).** Both upstreams are vendored and buildable. Nothing merged or
-ported yet. See [PLAN.md](PLAN.md) for current state and what's next — that's the living document,
-this one is orientation.
+**Status: staging (2026-08-15).** Both upstreams are vendored and buildable, and a desktop harness
+(`harness/`) boots the real `tiny-rv32ima` emulator to a Linux shell with no hardware. Nothing
+merged, ported, or flashed to hardware yet. See [PLAN.md](PLAN.md) for current state and what's
+next — that's the living document, this one is orientation.
 
 ## What this repo is
 
@@ -92,33 +93,20 @@ load-bearing for emulator throughput, not a bug. Flag it, don't "fix" it.
   `pico-displayDrivs`, `pico-ps2Driv`) — about 95% of it by volume. Actual original code in each
   project is ~2,000 lines. Prefer changing the app layer.
 
-## Desktop testing: read this before trying
+## Desktop testing
 
-Running the emulator on a desktop is the right way to iterate, but there's a catch that costs an
-afternoon if you don't know it.
+`harness/` at the repo root compiles the real `tiny-rv32ima` source
+(`upstream/pico-rv32ima/tiny-rv32ima/{emulator,cache,pff}/*.c`, unmodified) against desktop
+replacements for the hardware HAL headers, and boots to a Linux shell natively on this machine —
+no Pico, no PSRAM chips, no SD card needed. Build/run instructions and how it works are in
+PLAN.md's "Desktop harness" section.
 
-`cnlohr/mini-rv32ima` builds natively in seconds (~916 KB clone, 30 KB binary) and boots cnlohr's
-own images fine. **But neither project's images boot under it**, and it's not a broken image — the
-kernel executes correctly (verified by single-stepping; entry `0x80000000`, CSR setup, `fence.i`,
-normal early startup) but produces no console output.
-
-The reason: **`tiny-rv32ima` is not stock mini-rv32ima.** It adds custom CSRs in
-`tiny-rv32ima/emulator/emulator.c:396-470`:
-
-| CSR | Purpose |
-| --- | --- |
-| `0x151`–`0x154` | block device — RAM pointer, seek offset, transfer size, read/write trigger |
-| `0x150`, `0x155` | block size, error status |
-| `0x170` | hibernate / snapshot |
-
-That block-device interface *is* `root=fe00`. Stock mini-rv32ima returns 0 for all of it, so the
-kernel comes up with no root device and dies before the console is usable.
-
-**The fix, when wanted:** build a desktop harness from `tiny-rv32ima` itself rather than from
-stock mini-rv32ima. Its five `hal_*.h` headers are one-line macros — swap them for desktop versions
-(`console`→stdio, `psram`→`malloc`, `sd`→a real file behind `pff`, `timing`→`clock_gettime`) and
-compile `emulator.c` + `cache.c` + `pff` natively. Roughly 150 lines of glue, and it yields a
-desktop build of the *exact* emulator the firmware runs, with a working block device.
+Why this exists and not something built on stock `cnlohr/mini-rv32ima`: that builds natively in
+seconds too, and boots cnlohr's own images fine, but **not either project's** — `tiny-rv32ima` adds
+custom CSRs (`tiny-rv32ima/emulator/emulator.c:396-470`, `0x150`–`0x155` for the `root=fe00` block
+device, `0x170` for hibernate) that stock mini-rv32ima doesn't implement, so the kernel comes up
+with no root device and dies silently before the console is usable. `harness/` sidesteps that by
+building the actual `tiny-rv32ima` core instead of stubbing around it.
 
 ## Scope fence
 

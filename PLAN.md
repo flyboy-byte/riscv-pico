@@ -2,11 +2,12 @@
 
 Living state document. Current reality, not a task list.
 
-**Status: staging — both upstreams vendored and buildable, nothing ported yet (2026-08-15)**
+**Status: staging — both upstreams vendored and buildable, desktop harness boots to a Linux shell,
+nothing ported to hardware yet (2026-08-15)**
 
-**Next session starts here:** desktop harness design is fully scoped (see "Desktop harness —
-promoted to next up" below) but zero code written. Don't re-investigate the HAL surface — it's all
-documented. Just start writing `harness/`.
+**Desktop harness works.** `harness/` boots the real tiny-rv32ima emulator (custom CSRs and all) to
+a Linux shell prompt natively on this machine — see "Desktop harness" section below for how to run
+it. No hardware needed for any future PSRAM/cache/emulator-core iteration.
 
 ## Where things actually stand
 
@@ -18,7 +19,7 @@ documented. Just start writing `harness/`.
   `Image` 2.2 MB, `dtb` 2 KB, `rootfs` 60 MB ext2).
 - ❌ Nothing flashed to hardware yet.
 - ❌ Nothing ported between the two projects.
-- ❌ No desktop harness.
+- ✅ Desktop harness — boots to a Linux shell, no hardware. See below.
 
 ## Hardware on hand
 
@@ -84,52 +85,65 @@ Ordered so the risky unknowns resolve first and nothing depends on the display w
 Optional but high-leverage, can slot in any time after step 3: **the desktop harness**
 (see CLAUDE.md) — makes steps 4–5 iterable without touching hardware.
 
-### Desktop harness — promoted to next up (2026-08-15)
+### Desktop harness (built and working, 2026-08-15)
 
-Chips are hand-soldered and buried; hardware bring-up is a hassle right now. Decided to build the
-desktop harness *before* step 1, not after step 3 — get the emulator itself booting on this machine
-first, since none of that work needs the physical Pico at all.
+Chips are hand-soldered and buried; hardware bring-up was a hassle to start with, so the desktop
+harness got built *before* hardware step 1, not after step 3. It compiles the real `tiny-rv32ima`
+source (`emulator.c`, `cache.c`, `pff.c`) from `upstream/pico-rv32ima/tiny-rv32ima/` — unmodified,
+D-003 still holds — against a new set of desktop `hal_*.h` headers in `harness/`, replacing only
+`psram.c`'s and `pff`'s hardware backends:
 
-Design is scoped, not yet written (ran out of session budget mid-investigation — pick this up fresh
-rather than mid-context). What's already known, so it isn't re-derived:
+- `harness/hal_console.h`, `hal_csr.h`, `hal_timing.h` — trivial stdio/no-op/`clock_gettime` stubs.
+- `harness/console.c`/`.h` — desktop console: stdio putc/puts, non-blocking stdin via `select()`.
+- `harness/hal_psram.h` — the one with real logic. `psram.c` drives PSRAM through exactly four
+  macros (`select`/`deselect`/`spi_write`/`spi_read`); this reimplements them as a tiny state
+  machine over one static `psram_mem[EMULATOR_RAM_MB * 1MB]` array. First `spi_write` after
+  `select()` is always the cmd+24-bit-address prefix (parsed from bytes 0 and 1-3); everything after
+  is payload, memcpy'd to/from the array at that address. One special case: cmd `0x9F` (READ_ID)
+  makes the read return byte 1 = `0x5D` so `psram_read_kgd()` passes. Verified: only `psram.c`
+  includes this header, so the file-static state is safe.
+- `harness/diskio.c` + `harness/harness_disk.h` — **skips `pff/mmcbbp.c` (the real MMC-over-SPI
+  protocol) entirely.** `pff.c` only needs `disk_initialize`/`disk_readp`/`disk_writep`, which don't
+  care how they're backed — these serve 512-byte sectors straight out of a raw FAT-image file via
+  `fseek`/`fread`/`fwrite`. `main.c` opens the image path from `argv[1]` into `harness_disk_img`
+  before calling `vm_init_hw()`.
+- `harness/vm_config.h` — trimmed copy of `pico-rv32ima/pico-rv32ima/vm_config.h` (8 MB RAM,
+  `IMAGE`/`DTB`/`ROOTFS` filenames, same cache sizing). Both `emulator.c` and `cache.c` need it.
+- `harness/main.c` — `vm_init_hw()` then loops `start_vm(EMU_GET_SD)`, same as core 1 on real
+  hardware.
 
-- `tiny-rv32ima` compiles as five source files against five `hal_*.h` seams:
-  `emulator/emulator.c`, `cache/cache.c`, `pff/pff.c`, plus **either** `psram/psram.c` (real) or a
-  desktop replacement, **either** `pff/mmcbbp.c` (real SD-over-SPI) or a desktop `diskio.c`.
-- `hal_console.h`, `hal_csr.h`, `hal_timing.h` are trivial to stub for desktop (stdio putc/getc,
-  no-op custom CSRs, `clock_gettime`). `console.h` (from `pico-rv32ima/pico-rv32ima/console/`) needs
-  a matching desktop version providing `console_putc`, `console_puts`, `console_panic`,
-  `console_available`/`console_read` (backed by a queue or just stdin).
-- **PSRAM**: don't bother faking real SPI. `psram.c`'s four hal macros
-  (`psram_select`/`psram_deselect`/`psram_spi_write`/`psram_spi_read`) can be reimplemented in a
-  desktop `hal_psram.h` as a tiny state machine over one `malloc`'d buffer (size = `EMULATOR_RAM_MB`
-  from `vm_config.h`): first `psram_spi_write` after `psram_select()` is always the
-  cmd+24-bit-address prefix (parse `buf[0]` as cmd, `buf[1..3]` as address); a later
-  `psram_spi_write`/`psram_spi_read` is the payload, memcpy'd to/from `malloc_buf + addr`. One
-  special case: cmd `0x9F` (READ_ID) must make the read return `buf[1] == 0x5D` (the KGD byte) so
-  `psram_read_kgd()` passes. This header is only ever included by `psram.c`, so the state can be
-  file-static — no multi-TU issues. Confirmed `cache.c` only calls `psram_access()`, never the hal
-  macros directly, so this is the *only* place SPI needs faking.
-- **SD/pff**: don't try to fake the MMC-over-SPI protocol in `mmcbbp.c` at all — skip compiling it.
-  `pff.c` only depends on `diskio.h`'s three functions (`disk_initialize`, `disk_readp`,
-  `disk_writep`), which are protocol-agnostic. Write a from-scratch desktop `diskio.c` that opens a
-  raw FAT image file (the same SD card image structure `IMAGE`/`DTB`/`ROOTFS` would use, or reuse the
-  images already downloadable via the README's `gh release download` command) and serves sectors
-  with `fseek`/`fread`/`fwrite` directly. No SD emulation needed.
-- **Entry point**: `tiny-rv32ima/emulator/emulator.h` exposes exactly `start_vm(prev_power_state)`
-  and `vm_init_hw(void)` — a desktop `main.c` just calls `vm_init_hw()` then
-  `start_vm(EMU_GET_SD)` (mirrors what `pico-rv32ima/pico-rv32ima/main.c` does on core 1).
-  `vm_init_hw()` calls `psram_init()` and `pf_mount()` and panics via `console_panic()` on failure —
-  good early signal once the harness compiles.
-- Needs its own `vm_config.h` (RAM size, filenames, cache line/set sizing — copy pico-rv32ima's and
-  trim) since `emulator.c` and `cache.c` both `#include "vm_config.h"` unqualified.
-- Where to put it: a new top-level `harness/` directory in *this* repo (not under `upstream/`) with
-  its own tiny CMakeLists or even a flat `gcc` command — compiles
-  `tiny-rv32ima/{emulator,cache,pff}/{emulator,cache,pff}.c` from `upstream/pico-rv32ima/tiny-rv32ima/`
-  plus harness-local `hal_console.h`, `hal_csr.h`, `hal_timing.h`, `hal_psram.h`, `console.h`,
-  `console.c`, `diskio.c`, `vm_config.h`, `main.c`. Does not touch upstream trees at all — D-003
-  (pristine upstream) still holds.
-- Rough size estimate still holds: ~150-200 lines of new glue code total, all in `harness/`.
+**Build:**
+```sh
+TINY=upstream/pico-rv32ima/tiny-rv32ima
+gcc -O1 -g -Wall -I harness -I $TINY/emulator -I $TINY/psram -I $TINY/cache -I $TINY/pff \
+  harness/main.c harness/console.c harness/diskio.c \
+  $TINY/emulator/emulator.c $TINY/cache/cache.c $TINY/psram/psram.c $TINY/pff/pff.c \
+  -o harness/rv32harness
+```
+Only warnings from upstream's own code (a const-qualifier discard, some `int`/`UINT` pointer-sign
+mismatches on `pf_write`/`pf_read` calls) — harmless, not touched since upstream stays pristine.
+
+**Disk image (not checked in — build locally with `mtools`, no root needed):**
+```sh
+dd if=/dev/zero of=disk.img bs=1M count=80
+mformat -F -i disk.img ::
+mcopy -i disk.img <path-to>/Image ::IMAGE
+mcopy -i disk.img <path-to>/dtb   ::DTB
+mcopy -i disk.img <path-to>/rootfs ::ROOTFS
+```
+`Image`/`dtb`/`rootfs` come from `gh release download v1.0 --repo tvlad1234/buildroot-tiny-rv32ima
+--pattern images.zip` (per README).
+
+**Run:** `./harness/rv32harness disk.img` — boots straight to a `~ #` busybox shell in a couple
+seconds, full kernel log, no keypress wait (`pwr_button()` is hardwired true for desktop). Shell
+builtins work. External exec (`ls`, `cat`, etc.) fails with `binfmt_flat: ... errno -12` — that's
+the NOMMU allocator failing to find contiguous space in this Buildroot config's ~5.9 MB usable RAM,
+a property of the 8 MB image itself, not a harness bug; same thing would happen on real hardware
+with one PSRAM chip. Not chased further — the harness's job (iterate on the emulator/cache/PSRAM
+port without hardware) is proven.
+
+Not yet done: no CMakeLists/build script checked in (the harness is one `gcc` line, didn't seem
+worth it yet); disk image build isn't scripted, just documented above.
 
 ## Decisions already made (do not re-ask)
 
