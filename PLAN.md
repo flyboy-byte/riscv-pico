@@ -253,8 +253,8 @@ debugfs -w -R "write /path/to/hello usr/bin/hello" rootfs
 debugfs -w -R "sif usr/bin/hello mode 0100755" rootfs
 mcopy -o -i harness/disk.img rootfs ::ROOTFS   # sync into the FAT test image the harness boots
 ```
-Then restart `harness/webconsole.py` (kill any old `rv32harness`/`webconsole.py` first — see
-"process hygiene" note below) and the new binary is runnable from the shell immediately.
+Then restart `harness/desktop_terminal.py` (kill any old `rv32harness`/`desktop_terminal.py` first
+— see "process hygiene" note below) and the new binary is runnable from the shell immediately.
 
 **Two hard-won gotchas, worth not re-learning:**
 - **Never run two `make toolchain` invocations against the same `output/` directory
@@ -265,9 +265,10 @@ Then restart `harness/webconsole.py` (kill any old `rv32harness`/`webconsole.py`
   stages later (during `uclibc` headers). The fix was a full `rm -rf output/build output/host` and
   one clean single-threaded rebuild attempt. `pgrep` gave false negatives for whether old builds
   were still running — trust `ps -eo pid,etime,cmd` instead when in doubt.
-- **Process hygiene for the harness/webconsole background processes generally**: always verify
-  with `ps`, not `pgrep -f`, before assuming something died or restarting it — this session
-  accumulated duplicate `rv32harness` processes the same way.
+- **Process hygiene for the harness's background processes generally**: always verify with `ps`,
+  not `pgrep -f`, before assuming something died or restarting it — `pgrep -f` gave false negatives
+  more than once this session (both for `make toolchain` and for `rv32harness`), and this session
+  accumulated duplicate `rv32harness` processes as a result each time.
 
 ### apps/ — cross-compiled userspace programs (2026-08-15)
 
@@ -292,8 +293,8 @@ debugfs -w -R "write /path/to/NAME usr/bin/NAME" rootfs
 debugfs -w -R "sif usr/bin/NAME mode 0100755" rootfs
 mcopy -o -i harness/disk.img rootfs ::ROOTFS
 ```
-Then restart `harness/webconsole.py` (kill old `rv32harness`/`webconsole.py` first, verify with
-`ps`, not `pgrep -f` — see the process-hygiene note above).
+Then restart `harness/desktop_terminal.py` (kill old `rv32harness`/`desktop_terminal.py` first,
+verify with `ps`, not `pgrep -f` — see the process-hygiene note above).
 
 - **`hello.c`** — minimal smoke test, proves the pipeline works at all.
 - **`basic.c`** — a small integer-only BASIC interpreter (26 vars A-Z, `PRINT`/`LET`/`IF THEN`/
@@ -304,16 +305,13 @@ Then restart `harness/webconsole.py` (kill old `rv32harness`/`webconsole.py` fir
   line itself, which re-executed the initialization and reset the loop variable every iteration
   (infinite loop) — fixed by jumping to the line *after* `FOR` instead.
 
-### Console can't do full-screen apps yet
+### Full-screen apps — unblocked (2026-08-15)
 
-`harness/webconsole.py`'s terminal handling only understands "append text" and "backspace erases
-the previous character" — it strips ANSI CSI sequences (`ESC[...` + a letter) rather than acting on
-them. That's fine for line-oriented programs (a shell, Tiny BASIC) but means a full-screen editor
-or a game that redraws the screen via cursor-positioning/clear-screen escapes will render as
-garbage right now. Needed before the text-editor or terminal-game ideas can work: teach the
-console's JS a minimal subset of real cursor addressing (cursor move, clear-screen, maybe clear-
-to-end-of-line as an actual erase instead of a no-op) — a real (if small) terminal emulator, not
-just a stripper.
+Was blocked on the old browser console only understanding "append text" + backspace, stripping
+real cursor-positioning escape sequences instead of acting on them. Resolved by replacing it with
+`harness/desktop_terminal.py` (see "Desktop terminal app" below), which uses `pyte` for real
+VT100/ANSI interpretation. The text-editor and terminal-game ideas should now be viable — not yet
+tried against this new console, so "should work" is a reasonable bet, not yet verified.
 
 ### Vision beyond the port (2026-08-15, from conversation — not yet scoped)
 
@@ -332,22 +330,23 @@ rebuild question), a tiny BASIC interpreter, a Lua interpreter, a terminal game 
 ANSI escapes, no curses needed). User wants to pick one (or more) next session — compiling takes
 real wall-clock time and today's already spent a lot of it on toolchain archaeology.
 
-### Live web console (built, 2026-08-15)
+### Desktop terminal app (built, 2026-08-15 — superseded the browser console)
 
-`harness/webconsole.py` — stdlib-only Python, no dependencies. Spawns `rv32harness` as a subprocess
-and serves a local page at `http://127.0.0.1:8765` (port configurable) that shows the console
-output live via Server-Sent Events, plus a text box to send input. A plain `POST /input` (e.g.
-`curl -X POST http://127.0.0.1:8765/input --data-binary $'uname -a\n'`) drives the same running VM
-from a script or from Claude — verified end to end: booted, `uname -a` and `echo` sent via curl
-both executed and their output showed up in `/backlog`. There's also `GET /backlog` (full
-transcript, plain text, easiest for scripted checks) alongside `GET /stream` (SSE, for the page).
+`harness/desktop_terminal.py` — a real PyQt6 desktop app, not a browser page. Spawns `rv32harness`
+as a subprocess same as before, but interprets its output through `pyte` (a real VT100/ANSI
+terminal emulation library — cursor movement, clear-screen, colors) and renders it in a
+custom-painted grid widget, instead of the browser console's old "just append text and strip
+escape sequences" approach. This is the actual fix for the full-screen-apps limitation noted
+above — a text editor or curses program should render correctly here where it couldn't before.
 
-Not a claude.ai Artifact — this account only has the `downloads`/`mcp` runtime capabilities, no
-live-streaming one, so a published Artifact can't back a live local process. This is a plain local
-dev server instead; open the URL in a normal browser tab.
+Run: `python3 harness/desktop_terminal.py harness/disk.img` (`--cols`/`--rows` to change the
+initial grid size, `--binary` to point at a different harness build). Requires `python-pyte` and
+`PyQt6` (both installed via `pacman`/already present respectively as of this session — `pyte` via
+`sudo pacman -S python-pyte`).
 
-Run: `python3 harness/webconsole.py harness/disk.img --port 8765` (the `harness/disk.img` FAT test
-image is gitignored, build it locally per the steps above).
+The old browser-based `harness/webconsole.py` (Server-Sent Events + a local HTTP server) has been
+**removed** — this app replaces it entirely, same role (watch the harness live, type into it,
+scriptable input) but with real terminal fidelity instead of a line-append hack.
 
 ## Decisions already made (do not re-ask)
 
