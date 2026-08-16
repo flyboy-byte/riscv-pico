@@ -19,10 +19,3 @@ AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
 LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
-
----
-
-This license covers this repository's own original code and documentation
-(harness/, apps/, and the top-level docs) only. Code under upstream/ retains
-its original upstream licensing — see the LICENSE file in each subtree, and
-the "Licenses" section of README.md.
