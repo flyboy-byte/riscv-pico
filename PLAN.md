@@ -145,6 +145,24 @@ port without hardware) is proven.
 Not yet done: no CMakeLists/build script checked in (the harness is one `gcc` line, didn't seem
 worth it yet); disk image build isn't scripted, just documented above.
 
+**16 MB config verified (2026-08-15).** Bumped `harness/vm_config.h` `EMULATOR_RAM_MB` to 16,
+rebuilt, booted the *same* 8 MB-era image unchanged. `cat /proc/meminfo` reports `MemTotal: 14096
+kB` — confirms the DTB memory-node patch in `start_vm()` scales correctly off `ram_amt` at runtime,
+no code changes needed. Bonus: `cat`/`ls` (external binfmt_flat exec) now succeed, where they
+OOM'd at 8 MB — the earlier `errno -12` really was just the tiny RAM config, not a harness bug.
+This validates the *software* side of the multi-chip PSRAM port (RAM sizing, cache addressing over
+`ADDR_BITS 24` — exactly 16 MB, right at the edge — DTB patch) independent of the real SPI
+chip-select logic, which only matters on hardware. `ADDR_BITS` in `cache.c` is hardcoded to 24 and
+was not touched; 16 MB is the max this cache addressing supports without a further change.
+
+### Vision beyond the port (2026-08-15, from conversation — not yet scoped)
+
+Direction discussed: make this repo's distinguishing feature "runs without hardware," lean into
+that, and eventually cross-compile small C programs against the RISC-V toolchain and drop them into
+the rootfs to run under the harness (or real hardware) — not full desktop-app ports, just tiny
+userspace C binaries. Nothing scoped yet; next concrete steps are still the multi-chip PSRAM port
+and, later, an actual toolchain/rootfs-building setup if the app-porting idea gets picked up.
+
 ## Decisions already made (do not re-ask)
 
 - **D-001** — Repo is `flyboy-byte/riscv-pico`, public, upstreams vendored as **subtrees** (not

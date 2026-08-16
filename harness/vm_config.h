@@ -7,7 +7,7 @@
 
 #define DTB_SIZE 2048
 
-#define EMULATOR_RAM_MB 8
+#define EMULATOR_RAM_MB 16
 
 #define KERNEL_CMDLINE "console=hvc0 root=fe00"
 
