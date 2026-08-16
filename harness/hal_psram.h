@@ -22,13 +22,18 @@ static uint8_t psram_cur_cmd;
 static uint32_t psram_cur_addr;
 static int psram_have_cmd;
 
-static inline void psram_select(void)
+// psram.c now passes the chip-select address (real hardware uses it to pick a CS pin); the
+// harness has one flat malloc'd array standing in for however many chips are configured, so
+// there's nothing to select — the argument is unused here on purpose.
+static inline void psram_select(uint32_t addr)
 {
+    (void)addr;
     psram_have_cmd = 0;
 }
 
-static inline void psram_deselect(void)
+static inline void psram_deselect(uint32_t addr)
 {
+    (void)addr;
     psram_have_cmd = 0;
 }
 

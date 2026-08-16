@@ -48,6 +48,12 @@ int main()
     gpio_set_dir(PSRAM_SPI_PIN_S1, GPIO_OUT);
     gpio_put(PSRAM_SPI_PIN_S1, true);
 
+#if PSRAM_TWO_CHIPS
+    gpio_init(PSRAM_SPI_PIN_S2);
+    gpio_set_dir(PSRAM_SPI_PIN_S2, GPIO_OUT);
+    gpio_put(PSRAM_SPI_PIN_S2, true);
+#endif
+
     spi_init(PSRAM_SPI_INST, 1000 * 1000 * 50);
     gpio_set_function(PSRAM_SPI_PIN_TX, GPIO_FUNC_SPI);
     gpio_set_function(PSRAM_SPI_PIN_RX, GPIO_FUNC_SPI);

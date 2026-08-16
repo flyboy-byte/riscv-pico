@@ -19,9 +19,10 @@ hand-soldered **SPI PSRAM chips on DIP adapters** of uncertain condition, and an
 
 ## Layout
 
-Everything under `upstream/` is a `git subtree` with full upstream history. **Treat it as
-pristine** until the plan says otherwise — the point of this repo is that both projects stay
-readable as themselves.
+Everything under `upstream/` is a `git subtree` with full upstream history. `pico-linux` is still
+pristine. `pico-rv32ima` and its `tiny-rv32ima` subtree are not — the multi-chip PSRAM port (see
+PLAN.md) edits them directly; that was a deliberate D-003 exception, not scope creep. Future
+`git subtree pull`s on `pico-rv32ima`/`tiny-rv32ima` will need real merges from here on.
 
 ```
 upstream/pico-rv32ima/                 tvlad1234/pico-rv32ima      (maintained; RP2040+RP2350, VGA)

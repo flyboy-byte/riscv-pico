@@ -66,6 +66,8 @@
 /* PSRAM config
 /******************/
 
+// Set to 1 once a second graded-good chip is wired on PSRAM_SPI_PIN_S2. Also bump
+// EMULATOR_RAM_MB in vm_config.h to 16 — see the config check below.
 #define PSRAM_TWO_CHIPS 0
 
 // Hardware SPI instance to use for PSRAM
@@ -76,6 +78,24 @@
 #define PSRAM_SPI_PIN_TX 11
 #define PSRAM_SPI_PIN_RX 12
 #define PSRAM_SPI_PIN_S1 13
+#define PSRAM_SPI_PIN_S2 14
+
+// Capacity of a single physical PSRAM chip. Both known-working chips (LY68L6400,
+// ESP-PSRAM64H) are 8 MB.
+#define PSRAM_CHIP_SIZE_BYTES (8UL * 1024 * 1024)
+
+// Config check: EMULATOR_RAM_MB (vm_config.h) must fit in the enabled chip count, or
+// psram_access()'s modulo silently wraps addresses onto chip 1 instead of erroring.
+#include "vm_config.h"
+#if PSRAM_TWO_CHIPS
+#if (EMULATOR_RAM_MB * 1024UL * 1024UL) > (PSRAM_CHIP_SIZE_BYTES * 2)
+#error "EMULATOR_RAM_MB exceeds two PSRAM chips' capacity"
+#endif
+#else
+#if (EMULATOR_RAM_MB * 1024UL * 1024UL) > PSRAM_CHIP_SIZE_BYTES
+#error "EMULATOR_RAM_MB exceeds one PSRAM chip's capacity — enable PSRAM_TWO_CHIPS or lower EMULATOR_RAM_MB"
+#endif
+#endif
 
 /********************************************************/
 
