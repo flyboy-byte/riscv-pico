@@ -160,8 +160,26 @@ was not touched; 16 MB is the max this cache addressing supports without a furth
 Direction discussed: make this repo's distinguishing feature "runs without hardware," lean into
 that, and eventually cross-compile small C programs against the RISC-V toolchain and drop them into
 the rootfs to run under the harness (or real hardware) — not full desktop-app ports, just tiny
-userspace C binaries. Nothing scoped yet; next concrete steps are still the multi-chip PSRAM port
-and, later, an actual toolchain/rootfs-building setup if the app-porting idea gets picked up.
+userspace C binaries. Agreed ordering: the multi-chip PSRAM port and a hello-world cross-compile
+proof come *before* any rootfs/buildroot rework (nano, a real compiler) — those are a heavier,
+separate-session job (see below).
+
+### Live web console (built, 2026-08-15)
+
+`harness/webconsole.py` — stdlib-only Python, no dependencies. Spawns `rv32harness` as a subprocess
+and serves a local page at `http://127.0.0.1:8765` (port configurable) that shows the console
+output live via Server-Sent Events, plus a text box to send input. A plain `POST /input` (e.g.
+`curl -X POST http://127.0.0.1:8765/input --data-binary $'uname -a\n'`) drives the same running VM
+from a script or from Claude — verified end to end: booted, `uname -a` and `echo` sent via curl
+both executed and their output showed up in `/backlog`. There's also `GET /backlog` (full
+transcript, plain text, easiest for scripted checks) alongside `GET /stream` (SSE, for the page).
+
+Not a claude.ai Artifact — this account only has the `downloads`/`mcp` runtime capabilities, no
+live-streaming one, so a published Artifact can't back a live local process. This is a plain local
+dev server instead; open the URL in a normal browser tab.
+
+Run: `python3 harness/webconsole.py harness/disk.img --port 8765` (the `harness/disk.img` FAT test
+image is gitignored, build it locally per the steps above).
 
 ## Decisions already made (do not re-ask)
 
