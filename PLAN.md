@@ -381,6 +381,120 @@ scriptable input) but with real terminal fidelity instead of a line-append hack.
   branch `port/multi-chip-psram`). Future upstream `git subtree pull`s will need to merge through
   local changes from here on — that's an accepted tradeoff, not an oversight. (2026-08-15)
 
+## Hardware readiness — theoretical audit, no hardware touched (2026-08-15)
+
+Done ahead of real bring-up, specifically to catch mistakes on paper instead of during a debugging
+session. Evidence tagged **DOCUMENTED** (datasheet/spec), **REPORTED** (community consensus, no
+hard number), or **INFERRED** (derived, not directly sourced) — don't launder one into another.
+
+### Pin/wiring audit — DOCUMENTED (read directly from `hw_config.h`/`main.c`)
+
+Full pin map, `pico-rv32ima`, single source of truth is the header, not the README (README
+disagrees with it in places — known issue, noted since this project's `CLAUDE.md` was written):
+
+| Pin(s) | Used by |
+| --- | --- |
+| GPIO0 | SD CS **and** UART TX (see conflict below) |
+| GPIO1 | UART RX |
+| GPIO2–4 | SD CLK/TX/RX |
+| GPIO5–8 | Bit-banged SPI (CS/SCK/MOSI/MISO) |
+| GPIO10–13 | PSRAM CLK/TX/RX/S1 (chip 1 CS) |
+| GPIO14 | PSRAM S2 (chip 2 CS) — this session's addition |
+| GPIO16–20 | VGA VSYNC/HSYNC/R/G/B (G, B are `VGA_R_PIN`+1/+2, driver-computed, not `#define`d) |
+| GPIO25 | Onboard LED (`PICO_DEFAULT_LED_PIN`, SDK-defined) |
+| GPIO26–27 | PS/2 data/clock |
+| **Free\*** | GPIO9, 15, 21, 22, 23, 24, 28, 29 |
+
+\* **GPIO29 caveat, DOCUMENTED (search-confirmed):** wired to VSYS sense (ADC3) on the physical
+Pico board itself, not just an RP2040 chip capability question — using it as a general digital pin
+is unreliable regardless of what the chip alone would allow. Treat GPIO29 as not actually free.
+
+**Real conflict found, not previously documented: `UART_TX_PIN` (GPIO0) is the same pin as
+`SD_SPI_PIN_CS` (GPIO0).** Harmless right now only because `CONSOLE_UART` defaults to `0`
+(disabled) in `hw_config.h`. The moment someone flips it on for hardware-bring-up debugging — a
+very likely thing to reach for — it silently breaks the SD card, with no error message pointing at
+why.
+
+**Not fixed this session, deliberately** — tried to just move UART to two free pins and stopped
+short of it. UART0's alternate-pin table on RP2040 is fixed silicon, not arbitrary (confirmed
+GPIO0/1 and GPIO16/17 both work; GPIO16/17 are already taken by VGA sync here); couldn't get
+authoritative confirmation via search/community sources for any *other* UART0-capable pin, and
+guessing wrong would trade one landmine for another rather than fix anything. The actual fix needs
+the real RP2040 datasheet §1.4.3 GPIO function table (or a hardware test) — flagging this precisely
+so whoever does that lookup doesn't have to re-discover the conflict itself, just resolve it.
+
+**PSRAM_SPI_PIN_S2 (GPIO14, this session's port) confirmed conflict-free** against every other
+subsystem above — it's in the free-pin range.
+
+**Board caveat — DOCUMENTED, but which board wasn't confirmed by the user (session earlier only
+established "Pico or Pico W"):** on Pico **W** specifically, GPIO23/24/25/29 are wired to the
+CYW43 wireless chip, not general-purpose — the LED especially (`PICO_DEFAULT_LED_PIN`) is driven
+through the wireless chip's SPI on a W board, not a direct RP2040 pin, and the SDK's board header
+handles that automatically (not a firmware bug to fix), but it means GPIO23/24/29 aren't "free" on
+a W board the way the table above implies for a non-W Pico. Doesn't affect anything currently
+wired (GPIO14 is unaffected either way) — just don't reach for 23/24/29 later without checking
+which board is actually in hand.
+
+### SPI timing / signal integrity — DOCUMENTED (pulled real datasheet PDFs, not summaries)
+
+Both "known-working" chip models the project's README names — LY68L6400 and ESP-PSRAM64H — turn
+out to have essentially identical timing envelopes:
+
+- Max clock: **133–144 MHz** (linear, non-page-crossing). **84 MHz max** the instant a burst
+  crosses a 1KB page boundary (JEDEC-mandated, not a suggestion).
+- ESP-PSRAM64H specifically ([Espressif's own PDF](https://www.espressif.com/sites/default/files/documentation/esp-psram64_esp-psram64h_datasheet_en.pdf)):
+  Vcc 2.7–3.6 V (3.3V nominal sits comfortably inside), **Icc (active read/write) max 40 mA**,
+  standby 200 µA max, **tCEM (CE# low pulse width) max 8 µs** — CS cannot be held low continuously
+  longer than that.
+- CLK period minimum 7 ns (matches the 133/144 MHz max) for anything except a plain SPI read
+  (`'h03`), which is capped lower (30.3 ns / ~33 MHz).
+
+**So the project's configured `PSRAM_SPI_SPEED` (52 MHz stock, ~20 MHz suggested for bring-up) is
+conservative, not aggressive** — both chips are datasheet-rated for 2.5–4x that. `CLAUDE.md`'s
+existing "drop to ~20MHz for flying leads" advice is about signal integrity on unshielded wiring,
+not the chips' own ceiling — worth keeping as-is; the chips are not the limiting factor, the wiring
+is.
+
+**tCEM (8µs max CE-low) checked against the actual code, not just theoretical:** `psram_access()`
+already only ever holds CS low for one `CACHE_LINE_SIZE` (16 bytes) at a time (cache.c drives it
+per cache line, not per 512-byte block), so even at the slowest realistic SPI speed this session
+discussed (~20 MHz), 16 bytes is on the order of tens of nanoseconds of data time plus command
+overhead — nowhere near 8µs. **Confirmed compliant by design, not by luck.**
+
+### Power budget — mixed DOCUMENTED/REPORTED, one number genuinely unconfirmed
+
+- **RP2040 total GPIO+QSPI current budget: 50 mA, DOCUMENTED** (RP2040 datasheet, via search — not
+  independently re-verified against the primary PDF, treat as REPORTED-strength until it matters).
+  This is a *shared pool* across every GPIO sourcing/sinking current, not per-pin.
+- **The VGA color lines are the actual budget concern here, not PSRAM/SD.** README's own wiring
+  notes already say R/G/B need 330Ω series resistors. Driving 3.3V through 330Ω is ~10 mA per
+  active line; three color lines high simultaneously (a white pixel) is ~30 mA right there, before
+  anything else. SPI signal lines (PSRAM, SD, bit-banged) don't drive resistive loads — they
+  toggle logic levels into a chip's input, current draw there is negligible by comparison. If GPIO
+  budget ever gets tight, VGA is where to look, not the new PSRAM chip.
+- **Two PSRAM chips do NOT double active current** — INFERRED, but straightforward: only one chip
+  is ever selected at a time by design (that's the whole point of per-chip CS), so worst case is
+  one chip active (40 mA) plus one idle in standby (200 µA), not 2×40mA simultaneously.
+- **Pico's onboard regulator (RT6150): rated ~800 mA continuous, Raspberry Pi's own guidance
+  recommends staying under 300 mA external draw — REPORTED**, via search, not the primary
+  datasheet. 40 mA (or even 80mA if the "one chip at a time" assumption above is ever wrong) is a
+  small fraction of that regardless.
+- **RP2040 core current draw at the project's actual overvolt/overclock config (`VREG_VOLTAGE_MAX`
+  = 1.30V, 400MHz) — genuinely UNKNOWN, not sourced.** Search turned up plenty of "people run Pico
+  at 400MHz routinely without regulator problems" community consensus, but no hard mA figure at
+  this exact voltage/clock combination. Worth being honest that this is the one number in this
+  whole audit that's a real gap, not a confirmed-safe conclusion — though also worth noting
+  `VREG_VOLTAGE_MAX` (1.3V) is the RP2040's *built-in* regulator ceiling, reachable via software
+  alone — not the same as the trace-cutting/external-voltage extreme overclocking some hobbyists
+  do to push past it, which is a different and much riskier thing this project isn't doing.
+
+### Pico 2 / RP2350 support — noted, not started
+
+User interest, no work done. `pico-rv32ima` upstream already supports RP2350 (`#ifdef
+PICO_RP2350A` in `main.c`, `-DPICO_BOARD=pico2` build flag already documented in this repo's own
+README/CLAUDE.md) — so this may be closer to "verify it builds and note the differences" than a
+real port. Not investigated further this session.
+
 ## Ruled out, with reasons
 
 - **Emulating the RP2040 to test this.** Investigated all four options — `rp2040js` (no SPI, single
