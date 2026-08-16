@@ -2,15 +2,16 @@
 
 Living state document. Current reality, not a task list.
 
-**Status: full cross-compile pipeline proven — wrote, compiled, and ran a real program in the
-harness. Multi-chip PSRAM port done in software. Real hardware parked until further notice.
-(2026-08-15)**
+**Status: full cross-compile pipeline proven — wrote, compiled, and ran real programs (hello world,
+Tiny BASIC) in the harness. Multi-chip PSRAM port done in software. Desktop terminal app (PyQt6 +
+pyte) replaced the old browser console — real cursor support, unblocks full-screen apps. Toolchain
+available as a prebuilt release download, no rebuild needed. Real hardware parked until further
+notice. (2026-08-15)**
 
-**Next session starts here:** toolchain needs rebuilding (lives in ephemeral scratchpad, recipe
-below is fully de-risked — should go straight through this time). Tiny BASIC is done (see
-`apps/basic.c`); text editor, Lua, or a terminal game are still open — the latter two need the web
-console upgraded to real cursor-positioning support first (see "Console can't do full-screen apps
-yet" below).
+**Next session starts here:** `gh release download toolchain-v1 --pattern '*.tar.gz'` to get the
+compiler (no rebuild needed). Tiny BASIC is done (see `apps/basic.c`); text editor, Lua, or a
+terminal game are still open — the console can now render full-screen apps correctly (desktop
+terminal app fixed this) but that's not yet verified against a real full-screen program.
 
 **Desktop harness works.** `harness/` boots the real tiny-rv32ima emulator (custom CSRs and all) to
 a Linux shell prompt natively on this machine — see "Desktop harness" section below for how to run
@@ -200,13 +201,26 @@ class of bug hardware bring-up actually cares about — bad solder joints, SPI s
 overvolt stability — those are physical, not timing artifacts, and no software throttle simulates
 them. Revisit once there's a real hardware IPS number to target; cheap to add then.
 
-### Cross-compile toolchain — built and proven, 2026-08-15 (must be rebuilt next session)
+### Cross-compile toolchain — built and proven, 2026-08-15
 
 Full working `riscv32-buildroot-linux-uclibc-gcc` 13.3.0 cross-toolchain built and used to compile
-and run a real "hello world" live in the harness/web console. **The build itself lives in the
-session's ephemeral scratchpad and will not survive to the next session** — this section is the
-exact recipe to redo it, now de-risked (every failure mode below is already solved, so a rebuild
-should go straight through without the trial-and-error this session had).
+and run a real "hello world" and a Tiny BASIC interpreter live in the harness.
+
+**Now available as a prebuilt download — no rebuild needed**:
+[`toolchain-v1` release](https://github.com/flyboy-byte/riscv-pico/releases/tag/toolchain-v1),
+`riscv32-tinyrv32ima-toolchain.tar.gz` (69 MB compressed, 205 MB unpacked, x86_64 Linux host only).
+```sh
+gh release download toolchain-v1 --pattern '*.tar.gz'
+tar xzf riscv32-tinyrv32ima-toolchain.tar.gz
+export PATH=$PWD/host/bin:$PATH
+```
+Deliberately a release asset, not a git commit — keeps `git clone` small and doesn't put an opaque
+x86_64 binary blob in commit history (this repo may get shared; that matters more than usual). The
+build itself still lives in ephemeral session scratchpad and won't survive to a fresh session —
+this section is the from-source recipe, kept for anyone who'd rather build their own than trust a
+downloaded binary (completely reasonable for a compiler), or who's on a different host arch. Every
+failure mode below is already solved, so a from-source rebuild should go straight through without
+the trial-and-error this session had.
 
 **Why this needs a real buildroot build, not a distro cross-compiler:** the rootfs binaries
 (confirmed via `debugfs -R "dump ..." | file`) are **bFLT** (binary flat, no-MMU format), not

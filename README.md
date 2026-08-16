@@ -105,5 +105,15 @@ focus is the emulator/toolchain side, which needs none of it.
 
 ## Licenses
 
-Upstream code retains its original licensing — MIT / Apache-2.0 / BSD-3, see the `LICENSE` file in
-each subtree. Credit to tvlad1234, ElectroBoy404NotFound, CNLohr, and xhackerustc.
+This repo's own code (`harness/`, `apps/`, docs) is MIT — see [LICENSE](LICENSE). Upstream code
+under `upstream/` retains its original licensing — MIT / Apache-2.0 / BSD-3, see the `LICENSE` file
+in each subtree. Credit to tvlad1234, ElectroBoy404NotFound, CNLohr, and xhackerustc.
+
+## Pre-built cross-compiler
+
+A working `riscv32-buildroot-linux-uclibc-gcc` toolchain (this project's exact target: bFLT
+no-MMU/uClibc, needed to actually run anything on this system) is available as a
+[release asset](https://github.com/flyboy-byte/riscv-pico/releases/tag/toolchain-v1) instead of
+being checked into the repo — keeps `git clone` small and avoids shipping opaque x86_64 binaries
+in history. Grab it, or build your own from source — see `apps/` and PLAN.md's "Cross-compile
+toolchain" section for both paths.
