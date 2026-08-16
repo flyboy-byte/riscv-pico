@@ -164,11 +164,13 @@ class TerminalWidget(QWidget):
                     and row == cursor.y
                     and col == cursor.x
                 )
-                fg, bg = ch.fg, ch.bg
+                # Resolve to real colors *before* swapping for reverse/cursor — swapping the
+                # symbolic names first is a no-op when both are "default" (the common case: an
+                # empty cell at the prompt), which made the cursor invisible almost everywhere.
+                fg_color = color_for(ch.fg, DEFAULT_FG)
+                bg_color = color_for(ch.bg, DEFAULT_BG)
                 if ch.reverse or is_cursor:
-                    fg, bg = bg, fg
-                bg_color = color_for(bg, DEFAULT_BG)
-                fg_color = color_for(fg, DEFAULT_FG)
+                    fg_color, bg_color = bg_color, fg_color
 
                 x = col * self.char_w
                 if bg_color != QColor(DEFAULT_BG) or is_cursor:
