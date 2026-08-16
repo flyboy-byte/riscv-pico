@@ -7,8 +7,10 @@ harness. Multi-chip PSRAM port done in software. Real hardware parked until furt
 (2026-08-15)**
 
 **Next session starts here:** toolchain needs rebuilding (lives in ephemeral scratchpad, recipe
-below is fully de-risked — should go straight through this time). Then pick a utility to compile:
-text editor, tiny BASIC, Lua, or a terminal game — all discussed, none started.
+below is fully de-risked — should go straight through this time). Tiny BASIC is done (see
+`apps/basic.c`); text editor, Lua, or a terminal game are still open — the latter two need the web
+console upgraded to real cursor-positioning support first (see "Console can't do full-screen apps
+yet" below).
 
 **Desktop harness works.** `harness/` boots the real tiny-rv32ima emulator (custom CSRs and all) to
 a Linux shell prompt natively on this machine — see "Desktop harness" section below for how to run
@@ -266,6 +268,52 @@ Then restart `harness/webconsole.py` (kill any old `rv32harness`/`webconsole.py`
 - **Process hygiene for the harness/webconsole background processes generally**: always verify
   with `ps`, not `pgrep -f`, before assuming something died or restarting it — this session
   accumulated duplicate `rv32harness` processes the same way.
+
+### apps/ — cross-compiled userspace programs (2026-08-15)
+
+Source lives in `apps/` (checked in — unlike the toolchain, these are small and worth keeping).
+Compile with the toolchain from the section above:
+
+```sh
+GCC=buildroot/output/host/bin/riscv32-buildroot-linux-uclibc-gcc
+$GCC -mabi=ilp32 -fPIE -pie -static -march=rv32ima -Os -s -Wl,-elf2flt=-r apps/NAME.c -o NAME
+```
+
+**`-fPIE -pie` are not optional** — they were dropped once while compiling `basic.c` and it
+segfaulted on boot (`cause: 00000005`, load access fault at a small address) because the loader
+relocates the bFLT image at runtime (`gotpic` format) but the code had been compiled with absolute
+addressing. `hello.c` happened to work without them purely because it has almost no static data to
+misaddress — don't take that as evidence the flags are skippable. These are the exact flags from
+the project's own `goodies/hello_linux/Makefile`; match them.
+
+Inject into the rootfs (no rebuild of the FAT image needed for `IMAGE`/`DTB`, only `ROOTFS`):
+```sh
+debugfs -w -R "write /path/to/NAME usr/bin/NAME" rootfs
+debugfs -w -R "sif usr/bin/NAME mode 0100755" rootfs
+mcopy -o -i harness/disk.img rootfs ::ROOTFS
+```
+Then restart `harness/webconsole.py` (kill old `rv32harness`/`webconsole.py` first, verify with
+`ps`, not `pgrep -f` — see the process-hygiene note above).
+
+- **`hello.c`** — minimal smoke test, proves the pipeline works at all.
+- **`basic.c`** — a small integer-only BASIC interpreter (26 vars A-Z, `PRINT`/`LET`/`IF THEN`/
+  `GOTO`/`GOSUB`/`RETURN`/`FOR..NEXT`/`INPUT`/`LIST`/`RUN`/`NEW`). Line-based I/O only, no cursor
+  positioning — matches what the web console can currently render. Verified live: `FOR`/`NEXT`
+  loops, `IF`/`GOTO`, string+expression `PRINT`, variable assignment all correct on real target
+  execution. One real bug caught and fixed during testing: `NEXT` was jumping back to the `FOR`
+  line itself, which re-executed the initialization and reset the loop variable every iteration
+  (infinite loop) — fixed by jumping to the line *after* `FOR` instead.
+
+### Console can't do full-screen apps yet
+
+`harness/webconsole.py`'s terminal handling only understands "append text" and "backspace erases
+the previous character" — it strips ANSI CSI sequences (`ESC[...` + a letter) rather than acting on
+them. That's fine for line-oriented programs (a shell, Tiny BASIC) but means a full-screen editor
+or a game that redraws the screen via cursor-positioning/clear-screen escapes will render as
+garbage right now. Needed before the text-editor or terminal-game ideas can work: teach the
+console's JS a minimal subset of real cursor addressing (cursor move, clear-screen, maybe clear-
+to-end-of-line as an actual erase instead of a no-op) — a real (if small) terminal emulator, not
+just a stripper.
 
 ### Vision beyond the port (2026-08-15, from conversation — not yet scoped)
 
