@@ -723,17 +723,14 @@ families) registers and works. Confirmed no regression against the nano work fro
 day (write/save/exit round-trip still passes). New kernel+rootfs now live in `harness/disk.img` and
 published as GitHub release `net-v1`.
 
-**This is loopback-only — the actual SLIP-over-second-HVC-channel bridge described below is still
-not built.** What's done is the prerequisite (a kernel that *can* speak IP at all); what's left is
-wiring an actual guest↔host link. Scoping for that part below is unchanged from the original pass.
+~~This is loopback-only — the actual SLIP-over-second-HVC-channel bridge described below is still
+not built~~ — **superseded 2026-08-17**: the second HVC channel now exists and `guest→host` works;
+`host→guest` hits a real, unresolved console-freeze bug. Full current status is open item #1 at the
+top of this file — don't rely on this paragraph, it's the pre-Phase-1 snapshot.
 
-**A real, separate finding from this build, worth its own fix later:** with root now mounted `rw`
-(this session's earlier fix), abruptly killing the emulator process mid-session (exactly what
-`timeout N ./rv32harness...` or closing the desktop app does) can leave the ext2 rootfs with
-`EXT2-fs: error: ext2_lookup: deleted inode referenced` on the next boot — accumulates across
-repeated abrupt kills on the same disk image (reproduced during this session's own test iteration).
-Not fixed — noted for a future pass, likely needs either a clean-shutdown path or accepting
-periodic `e2fsck` / disk image resets during heavy iteration.
+~~A real, separate finding from this build... Not fixed — noted for a future pass~~ — **partially
+fixed 2026-08-17**: `desktop_terminal.py` now sends `sync` before terminating (see open item #2 at
+the top). Not a complete fix (only covers app-controlled shutdown paths), still tracked as open.
 
 **Recommendation: SLIP over a second HVC console channel, not a new CSR-based NIC.** **DOCUMENTED**
 (`tiny-rv32ima/emulator/emulator.c:395-465` + the kernel's own
