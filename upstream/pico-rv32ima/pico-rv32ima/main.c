@@ -35,9 +35,11 @@ int main()
     sleep_ms(50);
 #endif
 
-    // LED
+    // LED - not present on _w boards (LED is on the CYW43 wireless chip, not a GPIO)
+#ifdef PICO_DEFAULT_LED_PIN
     gpio_init(PICO_DEFAULT_LED_PIN);
     gpio_set_dir(PICO_DEFAULT_LED_PIN, GPIO_OUT);
+#endif
 
     // PSRAM GPIO and SPI
     gpio_init(PSRAM_SPI_PIN_TX);

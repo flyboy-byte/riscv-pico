@@ -3,16 +3,17 @@
 Living state document. Current reality, not a task list.
 
 **Status: full cross-compile pipeline proven — wrote, compiled, and ran real programs (hello world,
-Tiny BASIC, real GNU nano 7.2) in the harness. Nano crashed reliably under real GUI use (SIGILL) —
-root-caused to buildroot's own upstream `-fPIC` default for RISC-V `BINFMT_FLAT` conflicting with
-this project's `-fPIE -pie` requirement, fixed at the source (`package/Makefile.in`), verified
-through a full clean rebuild, `disk.img` updated. Not yet republished as a release. Desktop app
-polish (menu bar, RAM-config switch, reboot, TTY-size sync) built and had two real bugs found via
-live user testing and fixed (stale COLUMNS after plain window resize; resize-triggered sync
-spamming during a drag) — see "Desktop harness as a real app" below for the full history. Multi-chip
-PSRAM port done in software. All build outputs published as GitHub releases, not committed to git.
-Pico 2 / RP2350 (2W) support and a Pico-2W-networking design scoped on paper, nothing built yet.
-Real hardware parked until further notice. (2026-08-16)**
+Tiny BASIC, real GNU nano 7.2) in the harness. Nano's SIGILL crash root-caused and fixed
+(`package/Makefile.in`'s `-fPIC`→`-fPIE -pie`), and two follow-up bugs found via live use (read-only
+rootfs, Enter key not registering in nano) are also fixed and verified — see "Next session starts
+here" below. Desktop app polish (menu bar, RAM-config switch, reboot, TTY-size sync) built and had
+two real bugs found and fixed (stale COLUMNS after plain window resize; resize-triggered sync
+spamming during a drag). Multi-chip PSRAM port done in software. **`pico-rv32ima` now builds clean
+for all four board targets** (`pico`, `pico_w`, `pico2`, `pico2_w`) — one small compat fix needed
+(`PICO_DEFAULT_LED_PIN` doesn't exist on `_w` boards, guarded with `#ifdef` in `main.c`/`hal_sd.h`),
+software-only, no hardware touched. All build outputs published as GitHub releases, not committed to
+git. Networking for the Pico 2 W guest is still scoped on paper only, nothing built. Real hardware
+parked until further notice. (2026-08-16)**
 
 **Next session starts here** — the two bugs noted last session are now fixed and verified
 (2026-08-16, later pass):
@@ -38,11 +39,28 @@ post-upload (md5 match on the downloaded nano). The `package/Makefile.in` buildr
 is still only in ephemeral scratch — reapply it if buildroot gets re-cloned fresh (patch is in the
 "Real GNU nano" section below).
 
-Three things scoped in an earlier session, still not built, in the order the user raised them — see
-PLAN.md sections below for each: **Pico 2 / RP2350 (2W) support** (no blockers found on paper, close
-to a `-DPICO_BOARD=pico2`/`pico2_w` build-flag flip), **networking for the guest on Pico 2 W** (SLIP
-over a second HVC console channel, not a custom CSR NIC — multi-session scope, no wall found), and
-further desktop-app polish beyond what's already built. These are the natural next things to pick up.
+**Pico 2 / RP2350 (2W) board support — done in software (2026-08-16, later pass).** All four board
+targets (`pico`, `pico_w`, `pico2`, `pico2_w`) now `cmake --build` clean with SDK 2.1.1, verified by
+actually running the builds (not just reading CMake config), not just reasoning about it on paper.
+One real, small fix was needed: `_w` boards have no `PICO_DEFAULT_LED_PIN` (LED lives on the CYW43
+wireless chip, not a GPIO) — `main.c`'s boot-LED init and `hal/hal_sd.h`'s `sd_led_on`/`sd_led_off`
+macros both referenced it unconditionally, now guarded with `#ifdef PICO_DEFAULT_LED_PIN` (no-op on
+`_w` boards). Three call sites total, nothing else touched — emulator/PSRAM code untouched. RP2350's
+overclock path (`PICO_RP2350A` branch in `main.c`) already existed and needed no change. PIO count
+was the one flagged unknown going in; the build didn't surface any PIO-related error, so it's not a
+blocker either (not yet stress-tested against actual PIO usage at runtime, but nothing failed at
+compile/link time where a PIO-count mismatch would show up as a static assert). `pico2`/`pico2_w`
+link fine even though this SDK's cyw43-driver/lwIP submodules aren't initialized here (shallow SDK
+clone, tinyusb-only) — that's fine because `pico-rv32ima` doesn't use CYW43 yet; wireless itself is
+still the separate, still-open "networking for the guest" item below. All four `.uf2`s published to
+GitHub release `pico-rv32ima-boards-v1`. **No hardware touched or flashed — software build
+verification only**, per the standing hardware-parked constraint.
+
+Two things still scoped on paper only, not built: **networking for the guest on Pico 2 W** (SLIP
+over a second HVC console channel, not a custom CSR NIC — multi-session scope, no wall found — this
+is the natural next thing to pick up, now that board support is real), and further desktop-app
+polish beyond what's already built (e.g. a board-target toggle in the app now that there's something
+real to toggle to).
 
 Cleanup done this session: two stale pre-`riscv-pico` scratch clones (`~/pico`, `~/projects/pico`,
 both confirmed clean unmodified upstream checkouts with no local commits) were deleted from the
@@ -478,6 +496,11 @@ scriptable input) but with real terminal fidelity instead of a line-append hack.
   port landed directly on `upstream/pico-rv32ima` and `upstream/pico-rv32ima/tiny-rv32ima` (on
   branch `port/multi-chip-psram`). Future upstream `git subtree pull`s will need to merge through
   local changes from here on — that's an accepted tradeoff, not an oversight. (2026-08-15)
+- **D-007** — Second accepted exception to D-003, on `main` this time (not a side branch): a 3-call-
+  site `#ifdef PICO_DEFAULT_LED_PIN` guard in `main.c`/`hal/hal_sd.h`, needed to make `pico_w`/
+  `pico2_w` board targets build at all (those boards have no GPIO LED). Software-only, no
+  emulator/PSRAM logic touched, `pico`/`pico2` byte-identical `.uf2` output before and after.
+  (2026-08-16)
 
 ## Hardware readiness — theoretical audit, no hardware touched (2026-08-15)
 
@@ -586,12 +609,25 @@ overhead — nowhere near 8µs. **Confirmed compliant by design, not by luck.**
   alone — not the same as the trace-cutting/external-voltage extreme overclocking some hobbyists
   do to push past it, which is a different and much riskier thing this project isn't doing.
 
-### Pico 2 / RP2350 (2W) support — scoped on paper, 2026-08-16, nothing built
+### Pico 2 / RP2350 (2W) support — scoped on paper 2026-08-16, built and verified in software the same day (later pass)
 
 Evidence tagged **DOCUMENTED** (read directly from source/SDK headers), **REPORTED** (community
 consensus, no primary source), or **INFERRED** (derived, not directly sourced) — same convention as
 the hardware-readiness audit above. No hardware exists to verify any of this; D-005 (hardware
-parked) still applies, this is scoping only.
+parked) still applies — everything below is a real `cmake --build`, not a flash.
+
+**Update, same day, later pass: the paper scoping below held up.** All four board targets
+(`pico`, `pico_w`, `pico2`, `pico2_w`) build clean against SDK 2.1.1. The build-system claim ("just
+works, zero code changes") was *almost* exactly right — one small fix was needed that the paper
+scoping missed: `_w` boards have no `PICO_DEFAULT_LED_PIN` (LED lives on the CYW43 chip's own SPI,
+not a plain GPIO — the Pico-W audit finding quoted below flagged this pin *routing* but not that
+`pico-rv32ima`'s own code unconditionally uses the symbol). `main.c`'s boot-LED init and
+`hal/hal_sd.h`'s `sd_led_on`/`sd_led_off` now guard with `#ifdef PICO_DEFAULT_LED_PIN`. Confirmed
+`pico`/`pico_w` still build identically to before (byte-identical `.uf2` sizes: 140800/138240) — no
+regression on the boards that already worked. All four `.uf2`s published as GitHub release
+`pico-rv32ima-boards-v1`. The PIO-count unknown noted below is still genuinely open — nothing at
+compile/link time exercises PIO block count, so this doesn't confirm or rule it out, just doesn't
+block the build.
 
 **Existing RP2350 accommodation is minimal — DOCUMENTED.** The *only* RP2350-specific code anywhere
 in the vendored tree is `main.c:21-34`'s `#ifdef PICO_RP2350A` branch, which picks a different

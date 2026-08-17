@@ -11,5 +11,11 @@ static inline uint8_t sd_spi_byte(uint8_t b)
     return b;
 }
 
+// Not present on _w boards (LED is on the CYW43 wireless chip, not a GPIO) - no-op there.
+#ifdef PICO_DEFAULT_LED_PIN
 #define sd_led_off() gpio_put(PICO_DEFAULT_LED_PIN, 0)
 #define sd_led_on() gpio_put(PICO_DEFAULT_LED_PIN, 1)
+#else
+#define sd_led_off()
+#define sd_led_on()
+#endif
