@@ -75,14 +75,18 @@ core, which does work.
 
 A real cross-compiler for this target (`riscv32-buildroot-linux-uclibc-gcc`, produces the `bFLT`
 no-MMU binary format this kernel needs) has been built and proven — see `apps/` for working
-examples (`hello.c`, a Tiny BASIC interpreter in `basic.c`), plus a real GNU nano 7.2 build
-(prebuilt in the [`apps-v1`](https://github.com/flyboy-byte/riscv-pico/releases/tag/apps-v1)
+examples (`hello.c`, a Tiny BASIC interpreter in `basic.c`, `sysinfo.sh`), plus a real GNU nano 7.2
+build (prebuilt in the [`apps-v1`](https://github.com/flyboy-byte/riscv-pico/releases/tag/apps-v1)
 release) — the first full-screen ncurses program proven running under the emulator. The toolchain
 itself isn't checked in (it's a real buildroot build, doesn't belong in git), but the exact rebuild
 recipe — including several real gotchas already solved so you don't have to re-discover them (a
 `-fPIC`-vs-`-fPIE` buildroot default that crashes anything built through its normal package recipes
 on this target, and a host-GCC-14+-vs-old-gnulib build failure) — is in PLAN.md's "Cross-compile
 toolchain" and "Real GNU nano" sections.
+
+The [`net-v1`](https://github.com/flyboy-byte/riscv-pico/releases/tag/net-v1) rootfs also ships a
+real `curl` (HTTP-only build) and `sysinfo` (a neofetch-style banner, but hush-compatible — real
+neofetch needs bash, which needs an MMU this NOMMU target doesn't have, so it's a hard no here).
 
 ## Building the firmware for real hardware
 
@@ -134,9 +138,9 @@ repo — keeps `git clone` small and avoids shipping opaque x86_64/RISC-V binari
 | Release | What |
 | --- | --- |
 | [`toolchain-v2`](https://github.com/flyboy-byte/riscv-pico/releases/tag/toolchain-v2) | `riscv32-buildroot-linux-uclibc-gcc`, wchar-enabled (needed for nano/ncurses) |
-| [`apps-v1`](https://github.com/flyboy-byte/riscv-pico/releases/tag/apps-v1) | Prebuilt `hello`, `basic`, `nano` bFLT binaries |
+| [`apps-v1`](https://github.com/flyboy-byte/riscv-pico/releases/tag/apps-v1) | Prebuilt `hello`, `basic`, `nano` bFLT binaries, plus `sysinfo` |
 | [`rv32harness-v1`](https://github.com/flyboy-byte/riscv-pico/releases/tag/rv32harness-v1) | Desktop harness binaries (`rv32harness-8mb`/`-16mb`), x86_64 Linux |
-| [`net-v1`](https://github.com/flyboy-byte/riscv-pico/releases/tag/net-v1) | Kernel + rootfs with a working TCP/IP stack and a second HVC channel |
+| [`net-v1`](https://github.com/flyboy-byte/riscv-pico/releases/tag/net-v1) | Kernel + rootfs with a working TCP/IP stack, a second HVC channel, `curl`, and `sysinfo` |
 | [`pico-rv32ima-boards-v1`](https://github.com/flyboy-byte/riscv-pico/releases/tag/pico-rv32ima-boards-v1) | Prebuilt `.uf2` firmware, all four board targets |
 
 Grab whichever you need, or build your own from source — see `apps/` and PLAN.md's "Cross-compile

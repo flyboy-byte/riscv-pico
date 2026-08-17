@@ -8,8 +8,10 @@ are all root-caused and fixed. The desktop app is a real menu-bar app (reboot, R
 disk picker, TTY-size sync). `pico-rv32ima` builds clean for all four board targets (`pico`,
 `pico_w`, `pico2`, `pico2_w`). The guest kernel has a working TCP/IP stack (loopback-verified) and a
 second HVC channel for the SLIP bridge — guest→host byte transfer works, host→guest is blocked on an
-unresolved console-freeze bug (see open item #1). All build outputs are published as GitHub
-releases, not committed to git. Real hardware parked until further notice. (2026-08-17)
+unresolved console-freeze bug (see open item #1). The rootfs now also has a real `curl` (HTTP-only
+build) and a hand-written `sysinfo` banner (neofetch-alike, but hush-compatible — real neofetch
+needs bash, which needs an MMU this NOMMU target doesn't have). All build outputs are published as
+GitHub releases, not committed to git. Real hardware parked until further notice. (2026-08-17)
 
 ## Open items, prioritized
 
@@ -470,6 +472,34 @@ verify with `ps`, not `pgrep -f` — see the process-hygiene note above).
   execution. One real bug caught and fixed during testing: `NEXT` was jumping back to the `FOR`
   line itself, which re-executed the initialization and reset the loop variable every iteration
   (infinite loop) — fixed by jumping to the line *after* `FOR` instead.
+- **`sysinfo.sh`** (2026-08-17) — a neofetch-style banner, no cross-compile needed (it's a shell
+  script, just gets copied to `usr/bin/sysinfo` via buildroot's overlay mechanism, not `apps/`'s
+  usual debugfs-inject path). Written for busybox `hush`, not bash — see the `curl`/`sysinfo`
+  section below for why bash itself is a hard no on this target.
+
+### `curl` and `sysinfo` — real userspace tools added (2026-08-17)
+
+User asked for `neofetch` and `curl`. **`neofetch` is a hard no, not a config option**: it
+`depends on BR2_USE_MMU` in buildroot (needs `bash`, which also `depends on BR2_USE_MMU`) — this is
+a NOMMU target (RV32IMA has no MMU), so neither can ever be built for it, full stop. Confirmed by
+reading `package/neofetch/Config.in` and `package/bash/Config.in` directly before doing any wasted
+work. User's call once told: skip neofetch, write a `hush`-compatible equivalent instead
+(`apps/sysinfo.sh` — banner + `uname`/`/proc/meminfo`/`/proc/uptime`, no bashisms).
+
+**`curl` — real, working, HTTP-only.** `BR2_PACKAGE_LIBCURL` + `BR2_PACKAGE_LIBCURL_CURL`, no TLS
+backend selected (buildroot's `olddefconfig` picked `BR2_PACKAGE_LIBCURL_TLS_NONE` automatically,
+matching this build's minimal-footprint precedent — add `BR2_PACKAGE_LIBCURL_OPENSSL` or similar if
+HTTPS is ever needed). No `BR2_USE_MMU` dependency, builds clean. Verified: `curl --version` prints
+a real libcurl 8.7.1 banner under the emulator.
+
+**Real bug found and fixed along the way: shell arithmetic was completely disabled.**
+`CONFIG_FEATURE_SH_MATH` was `# not set` in this minimal busybox config — `sysinfo.sh`'s uptime
+math (`$((UPTIME_SEC / 60))`) failed with `sh: can't execute 'UPTIME_SEC'` (hush tried to run the
+literal text as a command instead of doing arithmetic). Enabled `CONFIG_FEATURE_SH_MATH` +
+`CONFIG_FEATURE_SH_MATH_64`, confirmed fixed.
+
+Regression-tested clean against the new rootfs (boot, nano round-trip, loopback networking).
+Kernel+rootfs republished to `net-v1`; `sysinfo` also added to `apps-v1`.
 
 ### Full-screen apps — unblocked (2026-08-15)
 
