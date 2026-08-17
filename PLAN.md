@@ -11,9 +11,11 @@ two real bugs found and fixed (stale COLUMNS after plain window resize; resize-t
 spamming during a drag). Multi-chip PSRAM port done in software. **`pico-rv32ima` now builds clean
 for all four board targets** (`pico`, `pico_w`, `pico2`, `pico2_w`) — one small compat fix needed
 (`PICO_DEFAULT_LED_PIN` doesn't exist on `_w` boards, guarded with `#ifdef` in `main.c`/`hal_sd.h`),
-software-only, no hardware touched. All build outputs published as GitHub releases, not committed to
-git. Networking for the Pico 2 W guest is still scoped on paper only, nothing built. Real hardware
-parked until further notice. (2026-08-16)**
+software-only, no hardware touched. **Guest kernel networking built and verified** (`CONFIG_NET`/
+`INET`/`UNIX`/`PACKET`/`SLIP` + busybox `ifconfig`/`route`/`ping`/`slattach`) — loopback ping works
+end to end in the harness; the actual SLIP-over-second-HVC-channel guest↔host bridge is still not
+built (that part remains scoped, not implemented). All build outputs published as GitHub releases,
+not committed to git. Real hardware parked until further notice. (2026-08-16)**
 
 **Next session starts here** — the two bugs noted last session are now fixed and verified
 (2026-08-16, later pass):
@@ -56,11 +58,27 @@ still the separate, still-open "networking for the guest" item below. All four `
 GitHub release `pico-rv32ima-boards-v1`. **No hardware touched or flashed — software build
 verification only**, per the standing hardware-parked constraint.
 
-Two things still scoped on paper only, not built: **networking for the guest on Pico 2 W** (SLIP
-over a second HVC console channel, not a custom CSR NIC — multi-session scope, no wall found — this
-is the natural next thing to pick up, now that board support is real), and further desktop-app
-polish beyond what's already built (e.g. a board-target toggle in the app now that there's something
-real to toggle to).
+**Networking, later same day: kernel side done (loopback verified), SLIP bridge still not built.**
+See "Networking for the guest" section below for the full update. Next concrete step: implement the
+second HVC channel — a kernel patch (new file alongside
+`buildroot_overlay/board/tiny-rv32ima/patches/linux/6.6.18/0001-mini-rv32ima-HVC-driver.patch`,
+registering a second `hvc_alloc(1, ...)` port bound to a new CSR pair — `0x141`/`0x142` are free,
+checked against both `tiny-rv32ima/emulator/emulator.c`'s existing CSR usage and both
+`hal_csr.h`/`hal/hal_csr.h` custom-CSR hooks) plus a harness-side `custom_csr_write`/
+`custom_csr_read` implementation in `harness/hal_csr.h` (currently a pure no-op stub) bridging that
+CSR pair to a host PTY, so `slattach` on the guest and a matching SLIP setup on the host side can
+actually be tested end to end on the desktop harness before any RP2350/cyw43 work. Not started.
+
+**Reusable build environment for future kernel/rootfs rebuilds:** buildroot lives at
+`/home/logan/.riscv-pico-scratch/repo/buildroot` (~8GB, includes a working host toolchain — reuse
+this rather than re-cloning). **Hard lesson from this session, worth reading before touching it
+again:** don't build here from inside the session's tmpfs scratchpad (`/tmp/claude-1000/.../
+scratchpad/`) — it's only 7.5GB and a full kernel+host-GCC build blows straight through it,
+locking up the shell tool itself (every command fails with ENOSPC on its own bookkeeping, not just
+the build). Build from real disk. Also: pre-built host binaries bake in an absolute RPATH to
+wherever `output/host` physically lives — moving the checkout after a partial build breaks buildroot's
+own `check-host-rpath` sanity check; if relocating mid-build, wipe `output/host` and `output/build`
+first rather than trying to preserve them across the move.
 
 Cleanup done this session: two stale pre-`riscv-pico` scratch clones (`~/pico`, `~/projects/pico`,
 both confirmed clean unmodified upstream checkouts with no local commits) were deleted from the
@@ -670,11 +688,37 @@ exactly the class of bug that doesn't surface from reading source; needs a real 
 
 No blockers found on paper for either variant.
 
-### Networking for the guest (Pico 2 W target) — scoped on paper, 2026-08-16, nothing built
+### Networking for the guest (Pico 2 W target) — scoped 2026-08-16, kernel-side half built and verified same day (later pass)
 
-User's stated vision: a Pico 2 W running this project's Linux with working networking. Scoping only
-— D-005 still applies, no hardware to test against, nothing implemented yet. Evidence-tagged per
-the same DOCUMENTED/REPORTED/INFERRED convention as the hardware audit above.
+User's stated vision: a Pico 2 W running this project's Linux with working networking. D-005 still
+applies — no hardware to test against, this is all emulator/software work. Evidence-tagged per the
+same DOCUMENTED/REPORTED/INFERRED convention as the hardware audit above.
+
+**Update, same day, later pass: the "networking fully compiled out" gap is closed and verified,
+end to end, in the guest kernel.** `board/tiny-rv32ima/linux-nommu.config` now sets `CONFIG_NET`,
+`CONFIG_INET`, `CONFIG_UNIX`, `CONFIG_PACKET`, `CONFIG_SLIP`, `CONFIG_SLIP_COMPRESSED` (IPv6 left
+off, not needed for the SLIP design below); `busybox.config` now enables `ifconfig`, `route`,
+`ping`, `slattach`. Built via `buildroot-tiny-rv32ima`'s buildroot 2024.05 overlay, `HOSTCC=gcc-12
+HOSTCXX=g++-12` (this host's default `gcc-16` fails building old-gnulib host tools like `m4` —
+`-Werror=implicit-function-declaration` is on by default since GCC 14, a real, previously-unknown
+gotcha now documented for next time). **Verified, not just compiled in:** booted the new kernel
+under `harness/rv32harness-16mb`, `ifconfig lo up` brings up loopback, `ping -c N 127.0.0.1` gets
+real ICMP replies at 0% packet loss — the full stack (netlink/route, INET, UNIX, PACKET protocol
+families) registers and works. Confirmed no regression against the nano work from earlier in the
+day (write/save/exit round-trip still passes). New kernel+rootfs now live in `harness/disk.img` and
+published as GitHub release `net-v1`.
+
+**This is loopback-only — the actual SLIP-over-second-HVC-channel bridge described below is still
+not built.** What's done is the prerequisite (a kernel that *can* speak IP at all); what's left is
+wiring an actual guest↔host link. Scoping for that part below is unchanged from the original pass.
+
+**A real, separate finding from this build, worth its own fix later:** with root now mounted `rw`
+(this session's earlier fix), abruptly killing the emulator process mid-session (exactly what
+`timeout N ./rv32harness...` or closing the desktop app does) can leave the ext2 rootfs with
+`EXT2-fs: error: ext2_lookup: deleted inode referenced` on the next boot — accumulates across
+repeated abrupt kills on the same disk image (reproduced during this session's own test iteration).
+Not fixed — noted for a future pass, likely needs either a clean-shutdown path or accepting
+periodic `e2fsck` / disk image resets during heavy iteration.
 
 **Recommendation: SLIP over a second HVC console channel, not a new CSR-based NIC.** **DOCUMENTED**
 (`tiny-rv32ima/emulator/emulator.c:395-465` + the kernel's own
