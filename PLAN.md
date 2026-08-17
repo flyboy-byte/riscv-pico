@@ -3,15 +3,51 @@
 Living state document. Current reality, not a task list.
 
 **Status: full cross-compile pipeline proven — wrote, compiled, and ran real programs (hello world,
-Tiny BASIC) in the harness. Multi-chip PSRAM port done in software. Desktop terminal app (PyQt6 +
-pyte) replaced the old browser console — real cursor support, unblocks full-screen apps. Toolchain
-available as a prebuilt release download, no rebuild needed. Real hardware parked until further
-notice. (2026-08-15)**
+Tiny BASIC, real GNU nano 7.2) in the harness. Nano crashed reliably under real GUI use (SIGILL) —
+root-caused to buildroot's own upstream `-fPIC` default for RISC-V `BINFMT_FLAT` conflicting with
+this project's `-fPIE -pie` requirement, fixed at the source (`package/Makefile.in`), verified
+through a full clean rebuild, `disk.img` updated. Not yet republished as a release. Desktop app
+polish (menu bar, RAM-config switch, reboot, TTY-size sync) built and had two real bugs found via
+live user testing and fixed (stale COLUMNS after plain window resize; resize-triggered sync
+spamming during a drag) — see "Desktop harness as a real app" below for the full history. Multi-chip
+PSRAM port done in software. All build outputs published as GitHub releases, not committed to git.
+Pico 2 / RP2350 (2W) support and a Pico-2W-networking design scoped on paper, nothing built yet.
+Real hardware parked until further notice. (2026-08-16)**
 
-**Next session starts here:** `gh release download toolchain-v1 --pattern '*.tar.gz'` to get the
-compiler (no rebuild needed). Tiny BASIC is done (see `apps/basic.c`); text editor, Lua, or a
-terminal game are still open — the console can now render full-screen apps correctly (desktop
-terminal app fixed this) but that's not yet verified against a real full-screen program.
+**Next session starts here** — the two bugs noted last session are now fixed and verified
+(2026-08-16, later pass):
+
+1. **Root filesystem was read-only — fixed.** `KERNEL_CMDLINE` in `harness/vm_config.h` now has
+   `rw` appended (`"console=hvc0 root=fe00 rw"`), harness-only change (upstream `vm_config.h` left
+   untouched per the scope fence). Verified: `mount` inside the guest now shows
+   `/dev/root on / type ext2 (rw,relatime,...)` (was `ro`), and a scripted nano
+   write→save→exit→`cat` round-trip confirms content actually persists (previously nano's "Save
+   modified buffer?" prompt kept reappearing because the write silently failed).
+2. **Enter key in nano — fixed.** `desktop_terminal.py`'s `KEY_TO_BYTES` now maps
+   `Key_Return`/`Key_Enter` to `b"\r"` instead of `b"\n"` (raw-mode ncurses treats `\n` as literal
+   Ctrl+J). Verified via the same scripted round-trip: typing `line1\rline2\r` inside nano produced
+   two real lines, not a stuck cursor / unbound-key beep.
+   Both fixes tested process-level (spawning `rv32harness-16mb` directly, feeding stdin, reading
+   stdout) rather than through the Qt GUI — same binary/pipe path the app uses, just without needing
+   a display.
+
+The fixed `nano` (and the rebuilt harness binaries, now baking in the `rw` cmdline) have been
+republished: `apps-v1`'s `riscv32-tinyrv32ima-apps-v1.tar.gz` and `rv32harness-v1`'s
+`rv32harness-linux-x86_64-v1.tar.gz` were both re-uploaded with `--clobber` and spot-checked
+post-upload (md5 match on the downloaded nano). The `package/Makefile.in` buildroot patch itself
+is still only in ephemeral scratch — reapply it if buildroot gets re-cloned fresh (patch is in the
+"Real GNU nano" section below).
+
+Three things scoped in an earlier session, still not built, in the order the user raised them — see
+PLAN.md sections below for each: **Pico 2 / RP2350 (2W) support** (no blockers found on paper, close
+to a `-DPICO_BOARD=pico2`/`pico2_w` build-flag flip), **networking for the guest on Pico 2 W** (SLIP
+over a second HVC console channel, not a custom CSR NIC — multi-session scope, no wall found), and
+further desktop-app polish beyond what's already built. These are the natural next things to pick up.
+
+Cleanup done this session: two stale pre-`riscv-pico` scratch clones (`~/pico`, `~/projects/pico`,
+both confirmed clean unmodified upstream checkouts with no local commits) were deleted from the
+filesystem — not part of this repo, just noting it here in case a future session goes looking for
+them.
 
 **Desktop harness works.** `harness/` boots the real tiny-rv32ima emulator (custom CSRs and all) to
 a Linux shell prompt natively on this machine — see "Desktop harness" section below for how to run
@@ -284,6 +320,68 @@ Then restart `harness/desktop_terminal.py` (kill any old `rv32harness`/`desktop_
   more than once this session (both for `make toolchain` and for `rv32harness`), and this session
   accumulated duplicate `rv32harness` processes as a result each time.
 
+### Real GNU nano, cross-compiled and verified working (2026-08-16)
+
+First real, non-trivial upstream program ported to this target — not a from-scratch app like
+`basic.c`, an actual unmodified GNU nano 7.2 release, and the first thing exercising a full-screen
+ncurses UI end to end (proves the desktop terminal app's VT100/`pyte` fix from last session
+actually works, not just "should work").
+
+**Built via buildroot's own package recipes, not hand-rolled autotools cross flags** — nano hard-
+depends on ncurses (`libncursesw`), and buildroot already knows how to cross-compile both for this
+exact uclibc/no-MMU/bFLT target, so this reuses that instead of fighting `./configure --host=...`
+by hand. Same `buildroot-tiny-rv32ima` repo as the toolchain section above.
+
+**Config changes needed** (on top of the stock `tinyrv32ima_defconfig` — the pristine defconfig
+already has `BR2_PACKAGE_NCURSES=y`, just not the wide-char variant nano needs):
+```
+BR2_TOOLCHAIN_BUILDROOT_WCHAR=y     # toolchain itself needs wchar support baked in
+BR2_PACKAGE_NCURSES_WCHAR=y         # widen the existing ncurses package
+BR2_PACKAGE_NANO=y
+BR2_PACKAGE_NANO_TINY=y             # strips justify/spell-check/etc — also drops nano's only
+                                     # fork()/subprocess dependency, good on a no-MMU target
+```
+Apply with `make menuconfig`, or hand-edit `buildroot/.config` and run `make olddefconfig`.
+
+**The toolchain needs a full rebuild first** — `wchar` support isn't optional-to-add later, it's a
+toolchain-level flag. If starting from the published `toolchain-v1` release, that release predates
+this and doesn't have it; rebuild from source using the recipe in the "Cross-compile toolchain"
+section above (same gcc-12 host-compiler workaround applies), then:
+```sh
+cd buildroot
+make HOSTCC=gcc-12 HOSTCXX=g++-12 toolchain   # rebuild, now with wchar
+make HOSTCC=gcc-12 HOSTCXX=g++-12 ncurses nano
+```
+Output: `buildroot/output/target/usr/bin/nano` (bFLT, ~655 KB, statically linked — no separate
+`.so` to inject) and `buildroot/output/target/usr/lib/libncursesw.a`.
+
+**Terminfo — turned out to need zero extra work.** The rootfs (from the `images.zip` release asset)
+already ships a full terminfo database at `/usr/share/terminfo` (`linux`, `vt100`, `vt220`, `xterm`
+variants, etc., dated from the original 2025-08-27 build) — didn't need to inject anything for
+`TERM=vt100` to work.
+
+**Verified live, not just "compiles":** injected into `ROOTFS` the same way as `apps/*.c` (see
+below), booted in `harness/rv32harness`, ran `nano /dev/nanotest` (root is mounted read-only, so
+edited a devtmpfs path rather than a real file — that part's an artifact of the test, not of nano),
+typed a line of text, saved (`^O`), exited (`^X`), then `cat`'d the file back out and got the exact
+text written. Full nano UI rendered correctly over the raw console link: title bar, shortcut
+footer, `[ Modified ]`/`[ Wrote 2 lines ]` status messages, the works.
+
+**One real gotcha worth recording:** feeding nano a bare `\n` (LF) for what should be an Enter
+keypress does nothing useful — ncurses puts the tty in raw mode once nano starts, so `\n` lands as
+literal `Ctrl+J` ("Unbound key" in nano's status line), not "confirm"/"newline". Needs `\r` (CR)
+instead. Doesn't affect normal keyboard use (a real terminal's Enter key sends `\r`), only matters
+when scripting input via a pipe like this session's test did.
+
+**Published as GitHub releases (2026-08-16), not committed to git** — same reasoning as the
+original toolchain decision, this repo may be shared and opaque binary blobs don't belong in
+commit history:
+- [`toolchain-v2`](https://github.com/flyboy-byte/riscv-pico/releases/tag/toolchain-v2) — the
+  wchar-enabled rebuild, supersedes `toolchain-v1`.
+- [`apps-v1`](https://github.com/flyboy-byte/riscv-pico/releases/tag/apps-v1) — prebuilt `hello`,
+  `basic`, `nano` bFLT binaries (plus unstripped `.gdb` ELF originals), ready to inject into a
+  rootfs without recompiling anything.
+
 ### apps/ — cross-compiled userspace programs (2026-08-15)
 
 Source lives in `apps/` (checked in — unlike the toolchain, these are small and worth keeping).
@@ -488,12 +586,239 @@ overhead — nowhere near 8µs. **Confirmed compliant by design, not by luck.**
   alone — not the same as the trace-cutting/external-voltage extreme overclocking some hobbyists
   do to push past it, which is a different and much riskier thing this project isn't doing.
 
-### Pico 2 / RP2350 support — noted, not started
+### Pico 2 / RP2350 (2W) support — scoped on paper, 2026-08-16, nothing built
 
-User interest, no work done. `pico-rv32ima` upstream already supports RP2350 (`#ifdef
-PICO_RP2350A` in `main.c`, `-DPICO_BOARD=pico2` build flag already documented in this repo's own
-README/CLAUDE.md) — so this may be closer to "verify it builds and note the differences" than a
-real port. Not investigated further this session.
+Evidence tagged **DOCUMENTED** (read directly from source/SDK headers), **REPORTED** (community
+consensus, no primary source), or **INFERRED** (derived, not directly sourced) — same convention as
+the hardware-readiness audit above. No hardware exists to verify any of this; D-005 (hardware
+parked) still applies, this is scoping only.
+
+**Existing RP2350 accommodation is minimal — DOCUMENTED.** The *only* RP2350-specific code anywhere
+in the vendored tree is `main.c:21-34`'s `#ifdef PICO_RP2350A` branch, which picks a different
+`vreg_set_voltage` constant (`RP2350_OVERVOLT VREG_VOLTAGE_1_30` vs RP2040's `VREG_VOLTAGE_MAX`) —
+both still target 400MHz. Nothing else in the codebase branches on RP2350 vs RP2040.
+
+**Clarifying, not a risk: RP2350's Hazard3 RISC-V core is irrelevant here.** `boards/pico2.h` sets
+`PICO_PLATFORM=rp2350` — the board's Cortex-M33 ARM core, same architecture family as RP2040's
+Cortex-M0+. `tiny-rv32ima` is a software RV32IMA interpreter compiled as ordinary C for whichever
+core builds the firmware; it has nothing to do with RP2350's optional hardware Hazard3 RISC-V core
+(`PICO_PLATFORM=rp2350-riscv`, not used or wanted here).
+
+**Build system already just works — DOCUMENTED.** Top-level `CMakeLists.txt` has `PICO_BOARD` as a
+plain CMake cache variable (`set(PICO_BOARD pico CACHE STRING ...)`) — `-DPICO_BOARD=pico2` or
+`pico2_w` overrides it with zero code changes needed anywhere else in the tree.
+
+**Pico 2 W's CYW43 pin conflict is identical to original Pico W — DOCUMENTED, confirmed by direct
+comparison of `boards/pico2_w.h` against `boards/pico_w.h`.** Same GPIO set: `WL_REG_ON=23`,
+`WL_DATA=24`, `WL_CS=25`, `WL_CLOCK=29`. This repo's existing Pico-W audit finding (GPIO23/24/25/29
+off-limits, `PICO_DEFAULT_LED_PIN` routed through the wireless chip's SPI, GPIO29/VSYS double-duty)
+transfers to Pico 2 W unchanged — doesn't need to be re-derived per-board.
+
+**Multi-chip PSRAM port's GPIO14 — INFERRED conflict-free on both variants.** GPIO14 doesn't appear
+in either RP2350 board header's pin assignments (UART/I2C/SPI/CYW43/flash) — same conclusion the
+original single-Pico-W audit reached, now checked against RP2350 headers too.
+
+**Genuine open unknown, honestly can't be resolved on paper — REPORTED/INFERRED only.** RP2350 has
+3 PIO blocks vs RP2040's 2 (superset, documented as backward-compatible by Raspberry Pi, but not
+independently verified against a primary PIO ISA diff here) — the VGA console and PS/2 driver both
+use PIO (`console/vga/pio/*.pio.h`, `console/ps2/ps2.c`). PIO/SPI hardware-timing behavior is
+exactly the class of bug that doesn't surface from reading source; needs a real board.
+
+**Effort read, split by variant:**
+- **Plain Pico 2** — low risk. "Should build and run, mostly untested," not a real porting job. The
+  only honest gap is PIO/SPI timing, hardware-only.
+- **Pico 2 W** — same low risk *if* wireless itself is never actually used (not a current project
+  goal; the CYW43 pins simply stay reserved/unused, same as they'd be on any Pico W build). Actually
+  driving the wireless chip would be real, separate integration work, not a board-flag flip — but
+  nothing here needs that.
+
+No blockers found on paper for either variant.
+
+### Networking for the guest (Pico 2 W target) — scoped on paper, 2026-08-16, nothing built
+
+User's stated vision: a Pico 2 W running this project's Linux with working networking. Scoping only
+— D-005 still applies, no hardware to test against, nothing implemented yet. Evidence-tagged per
+the same DOCUMENTED/REPORTED/INFERRED convention as the hardware audit above.
+
+**Recommendation: SLIP over a second HVC console channel, not a new CSR-based NIC.** **DOCUMENTED**
+(`tiny-rv32ima/emulator/emulator.c:395-465` + the kernel's own
+`0001-mini-rv32ima-HVC-driver.patch`): the existing console is CSRs `0x139`/`0x140` (putchar/
+getchar, one byte polled at a time), wired into the guest via a genuinely tiny (66-line) driver on
+top of the **mainline Linux hvc framework**, which already supports multiple ports by `vtermno` —
+a second channel is `hvc_alloc(1, ...)` plus one more CSR pair, not a new subsystem. SLIP
+(`drivers/net/slip/slip.c`) is decades-old, MMU-agnostic, and attaches to *any* tty via `slattach`
+in userspace. So this reduces to "one more hvc instance + stock SLIP + stock lwIP framing on the
+RP2350 side" — reusing two already-proven mainline pieces instead of designing a new ring-buffer/
+DMA-style CSR-MMIO protocol from scratch.
+
+**Real finding, previously unflagged: the guest kernel has networking fully compiled out today.**
+**DOCUMENTED** (`board/tiny-rv32ima/linux-nommu.config`): zero `CONFIG_NET*`/`CONFIG_INET*` lines
+are set, and `busybox.config` confirms `ifconfig`/`slattach`/`udhcpc` are all `# not set`. So the
+real scope is "bring up the network stack from nothing" (`CONFIG_NET`, `INET`, `UNIX`, `PACKET`,
+`SLIP` + busybox net tools) — config-only, no kernel source patches needed beyond the one new hvc
+channel, but bigger than "flip one option on."
+
+**RAM budget** — **INFERRED** likely fine on the 16MB config (current kernel is ~1.7MB code with
+~14MB free, a minimal net stack + SLIP is on the order of a few hundred KB), not independently
+re-checked against the default 8MB/1-chip config.
+
+**Real risk, not just more work: throughput.** **INFERRED** from the CSR design itself — both
+console bytes today are polled one-at-a-time with no interrupt path. SLIP over that same model will
+almost certainly work correctly but be slow. "Network works" is realistic; "network is fast" isn't
+a promise this design shape can make.
+
+**RP2350 side** — **REPORTED** (standard, documented SDK pattern): `cyw43_arch_lwip_poll()`-style
+polling fits directly into `console_task()`'s existing core0 loop (core1 stays dedicated to the
+emulator, no new threading model needed). Rough shape: a few hundred lines bridging CSR byte I/O ↔
+SLIP framing ↔ lwIP raw API ↔ `cyw43_arch` — gluing three mature libraries, not inventing a
+protocol.
+
+**Effort/risk verdict: multi-session feature, not a single sitting — but no wall found.** Every
+piece (hvc multi-port, SLIP, lwIP polling) is a known, mainline, MMU-agnostic mechanism already
+designed for exactly this shape of narrow-channel networking. The two things that will only really
+surface with a real board: actual throughput, and whether `cyw43_arch`'s init sequence shares core0
+cleanly with `console_task()`.
+
+### Desktop harness as a real app — built and verified, 2026-08-16
+
+User wants the desktop harness to feel like a real software package, not a raw CLI binary. Built
+and smoke-tested (via `QT_QPA_PLATFORM=offscreen`, scripted — window creation, RAM switch actually
+swapping binaries, reboot keeping the subprocess alive, recent-files persistence/ordering, and
+`TerminalWidget.set_size()` all verified; **not yet clicked through by a human in a real session**):
+
+- **`harness/build.sh`** — new. Builds `rv32harness-8mb` and `rv32harness-16mb` from the same
+  source via `-DEMULATOR_RAM_MB=N` (now `#ifndef`-guarded in `harness/vm_config.h` instead of a
+  bare `#define`, so it's overridable at compile time without touching the file per build). The old
+  single `rv32harness` binary is gone — replaced by these two, `desktop_terminal.py` picks between
+  them.
+- **RAM-config switch — shipped as the build-matrix approach decided earlier**, not a runtime
+  parameter into vendored `tiny-rv32ima` code. Machine → RAM Config menu (radio-button style,
+  `QActionGroup`) picks which prebuilt binary to relaunch against; disabled/grayed if `--binary` was
+  passed explicitly (then there's no way to know which RAM configs are even available). Keeps
+  D-003's "stay pristine" promise intact — zero changes to vendored emulator/cache code, at the cost
+  of two binaries to keep in sync.
+- **Reboot** — Machine → Reboot (`Ctrl+R`): terminates the subprocess, resets the terminal screen
+  (`pyte`'s own `screen.reset()`), relaunches against the same binary+disk image. No emulator-side
+  support needed, matches a real hardware reboot's semantics reasonably well (cold restart, not a
+  live reset).
+- **File → Open Disk Image... / Recent** — `QFileDialog` picker plus a persisted recent-files list
+  (`harness/.recent_disk_images.json`, gitignored, newest-first, capped at 8). Switching disk image
+  restarts the subprocess against the new image, same machinery as reboot.
+- **Machine → TTY Size...** — prompts for cols/rows, calls `TerminalWidget.set_size()`. **Known,
+  documented limitation, not a bug**: this only resizes the local display grid — there's no
+  SIGWINCH-equivalent over the raw console link to tell the *guest* kernel/program the terminal
+  changed size, so a running full-screen program (nano, etc.) won't reflow until the harness is
+  restarted. Surfaced to the user via a status-bar message when they resize, not silently wrong.
+- **`disk_img` argument is now optional** (defaults to `harness/disk.img`), `--ram {8,16}` replaces
+  the old implicit-16MB-only behavior, `--binary` still available as an escape hatch for a custom
+  build (disables the RAM-config menu since the harness can't know what RAM size a custom binary
+  was compiled for).
+
+**Real bug found and fixed the same day, from actual human use — not caught by this session's
+earlier scripted verification.** User tried nano through the live app and line wrapping was
+visibly broken. Root cause, confirmed empirically (not guessed): the guest has **no `TIOCGWINSZ`
+support and no `stty` binary at all** on this custom console — `echo $COLUMNS $LINES` at the shell
+comes back empty, and there's no ioctl path for a program to learn the real terminal size. ncurses'
+fallback order is ioctl → `$COLUMNS`/`$LINES` env vars → terminfo's hardcoded default — with the
+first two both unavailable, nano was silently rendering as if the terminal were 80×24 (vt100's
+terminfo default) regardless of the actual window size. Verified directly: nano's title bar spans
+*exactly* 80 columns with nothing set, vs. the real window width once `$COLUMNS`/`$LINES` are
+exported — this wasn't a theory, it was measured both ways.
+
+**Fix, first pass**: auto-inject `export COLUMNS=<cols> LINES=<rows>\n` once the first `~ #` prompt
+is seen after boot. Verified: title-bar reverse-video run spans the full grid width (102/102 in the
+test), not 80.
+
+**User re-tested and it was still broken** — a real gap in the first pass, not a false report. Two
+things it missed:
+1. **A plain window drag-resize didn't re-sync at all** — only the explicit Machine → TTY Size
+   dialog did. A user resizing the window the ordinary way (not through that menu) went stale
+   again immediately.
+2. **Blindly sending the export string on any resize is actually unsafe, not just incomplete** — if
+   a full-screen program (nano) is already running when a resize happens, typing `export
+   COLUMNS=...` at that moment types it *into the document*, not into a shell that doesn't exist
+   at that moment. This would explain the user's report directly: nano opening but being
+   unreadable.
+
+**Fix, second pass**: `TerminalWidget` gained an `on_resize(cols, rows)` callback, fired from both
+`set_size()` (the menu dialog) and the real Qt `resizeEvent` (an ordinary window drag) — one code
+path covers both triggers now. Syncing itself is gated on an actual "idle at the shell prompt"
+check (`_track_output`/`_on_output_quiet`), debounced on a 200ms output-quiet period rather than
+firing the instant `~ #` appears anywhere in the stream — a program's own screen output could
+transiently end in that exact 4-byte sequence mid-update (a filename, a status line), and a real
+idle prompt is reliably followed by silence where a transient mid-stream match isn't. A resize that
+happens while a program is running sets a pending flag instead of sending anything immediately, and
+the deferred sync fires safely the next time the guest is confirmed back at the prompt.
+
+**Verified with a scripted test exercising the actual danger case, not just the happy path**:
+boot-sync fires; resizing while idle at the prompt syncs immediately (no pending flag); resizing
+*while nano is actively running* correctly sets the pending flag and — confirmed by scanning nano's
+own screen buffer afterward — injects nothing into the document; exiting nano back to the prompt
+fires the deferred sync. An already-running program still won't reflow live — no `SIGWINCH`-
+equivalent exists over this raw console link, a kernel-side change out of scope for an app-level
+fix — but the app no longer corrupts what's on screen while getting there.
+
+**User re-tested again and hit a third, more serious issue — a real screenshot (Spectacle,
+2026-08-16) made this one unambiguous instead of guessed at.** Two separate things were visible in
+it:
+1. **Confirmed bug, now fixed: resize-triggered sync was spamming the shell.** The screenshot
+   showed `export COLUMNS=76 LINES=18` / `19` / `20` / `21` fired back-to-back while the window was
+   being dragged — `_on_term_resize`'s "safe to send" check was correct in isolation but got
+   re-evaluated on *every single resize step* of a drag (a live drag fires many resize events), and
+   nothing changes about "are we idle at the prompt" between steps once the shell has settled — so
+   every step re-triggered a fresh send. **Fix**: resize itself is now debounced
+   (`_resize_debounce`, 300ms) before the safety check ever runs (`_flush_resize_sync`) — a drag
+   only produces one send, after it actually stops. Verified: 20 rapid resize steps in a scripted
+   test produced zero sends during the drag and exactly one afterward, matching the final size. The
+   running-program safety property (previous fix) still holds with the debounce in place — re-ran
+   that same scripted check.
+2. **The actual crash is unrelated to any of this — a kernel-level Oops, not a nano/userspace bug.**
+   `epc: 8097613c` in the register dump is a kernel-space address (not inside nano's binary),
+   `cause: 00000002` is RISC-V's standard exception code for illegal instruction — the *kernel*
+   executed an instruction it couldn't decode. **Ruled out as something this session's changes
+   caused**, checked by direct diff inspection, not just testing: the multi-chip PSRAM port
+   (`psram.c`, the one piece of the normally-pristine emulator core touched this session) reduces
+   to byte-for-byte the same behavior as the pre-port version when `PSRAM_TWO_CHIPS=0` (the only
+   config the harness ever runs) — `local_addr = PSRAM_TWO_CHIPS ? (addr % ...) : addr` is just
+   `addr`, `psram_select(addr)`/`psram_deselect(addr)` were already no-ops in
+   `harness/hal_psram.h`. `cache.c` was never touched by the port at all (checked via `git log`).
+   **Status: real, unexplained, and not reproduced under my own control** — multiple heavy stress
+   tests (60-line files, cut/paste, arrow keys, rapid resize, both RAM configs) via scripted input
+   never triggered it, so whatever causes it is either timing-sensitive in a way scripted input
+   doesn't hit, or rare enough that it needs many more trials.
+
+**Root cause found and fixed, 2026-08-16 — a screenshot with `Comm: nano` and a repeatable
+`epc: 8097613c` was the key clue.** On this NOMMU platform there's no separate kernel/userspace
+address space, so that address was misread earlier as "kernel code" — it's actually inside nano's
+own binary, and `unhandled signal 4` (SIGILL) with `Comm: nano` confirms it's nano crashing, not
+the kernel. Same *class* of bug this project already documented for `basic.c`: nano was compiled
+with `-fPIC` and no `-pie`, not `-fPIE -pie`. My own `apps/*.c` builds never hit this because they
+were compiled standalone with explicit flags, bypassing buildroot's package system entirely — nano
+was the first thing built through buildroot's actual internal recipes, which was needed to expose
+it. Traced to the real source: `package/Makefile.in` — buildroot's own upstream default for
+`BR2_BINFMT_FLAT` + `BR2_riscv` is `TARGET_CFLAGS += -fPIC`, a deliberate buildroot convention that
+conflicts with what this project's `elf2flt`/gotpic loader actually needs. Patched at that source
+(not a one-off Makefile hack) to `-fPIE -pie` instead, confirmed the fix survives a full clean
+rebuild through the normal `make ncurses nano` path (not just my manual test build), re-injected
+into `harness/disk.img`'s `ROOTFS`, and re-ran the heaviest stress test from this session (typing,
+arrow keys, cut/paste, save) 6 times clean with zero crashes — previously this reproduced reliably
+under real GUI use. **Not yet done:** buildroot itself lives in ephemeral scratch, not this repo, so
+this patch needs to be reapplied if buildroot is re-cloned from scratch in a future session — worth
+turning into a small patch file check into `apps/` or similar if this recurs. The fixed `nano`
+binary in `disk.img` hasn't been republished to the `apps-v1`/`rv32harness-v1` GitHub releases yet.
+
+**"Pico vs Pico 2 vs 2W toggle" still doesn't live in the desktop app** — confirmed reasoning from
+the scoping stands. The harness is always desktop x86; board selection (`-DPICO_BOARD=...`) is a
+real-hardware CMake build-time concern, a separate axis from anything the terminal GUI controls. A
+`build.sh --board=pico2w`-style wrapper for the *firmware* build (not the harness) would be a nice
+convenience later, not attempted this session.
+
+**Not yet done:** no human has actually clicked through the new menus in a live PyQt6 window this
+session — only scripted/offscreen verification. `.gitignore` updated (`harness/rv32harness*`,
+`harness/.recent_disk_images.json`, `__pycache__/`) so none of the build outputs or local state
+land in git, matching the toolchain/apps precedent of publishing binaries as GitHub releases
+instead. Published as
+[`rv32harness-v1`](https://github.com/flyboy-byte/riscv-pico/releases/tag/rv32harness-v1).
 
 ### What can actually run on this — scope question, answered 2026-08-15
 

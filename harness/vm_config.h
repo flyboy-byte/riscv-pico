@@ -7,9 +7,16 @@
 
 #define DTB_SIZE 2048
 
+// Overridable at compile time (-DEMULATOR_RAM_MB=N) so the build can produce multiple
+// fixed-RAM harness binaries — see harness/build.sh.
+#ifndef EMULATOR_RAM_MB
 #define EMULATOR_RAM_MB 16
+#endif
 
-#define KERNEL_CMDLINE "console=hvc0 root=fe00"
+// rw: no init script remounts root, and a read-only rootfs silently breaks anything writing
+// to it (nano's save, /tmp files) with no error surfaced anywhere. Harness-only change — the
+// upstream vm_config.h this mirrors is deliberately left untouched (see CLAUDE.md's scope fence).
+#define KERNEL_CMDLINE "console=hvc0 root=fe00 rw"
 
 #define EMULATOR_TIME_DIV 1
 #define EMULATOR_FIXED_UPDATE 0

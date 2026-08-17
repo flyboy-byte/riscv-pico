@@ -6,9 +6,13 @@ build_debug/
 # VS Code
 .vscode/
 
+# Python bytecode cache
+__pycache__/
+
 # Desktop harness build output and local test disk images
-harness/rv32harness
+harness/rv32harness*
 harness/*.img
+harness/.recent_disk_images.json
 
 # Downloaded kernel/rootfs images (large, fetched from upstream releases)
 images/
