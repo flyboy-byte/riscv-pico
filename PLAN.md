@@ -72,10 +72,13 @@ releases, not committed to git. Real hardware parked until further notice. (2026
    §1.4.3 GPIO function table (GPIO16/17 also work for UART0 but are already taken by VGA sync here).
    Software-fixable without hardware once the right pin is confirmed; final verification needs
    hardware. Found 2026-08-15, still open.
-4. **Firmware board-target build wrapper — scoped, not built.** A `build.sh --board=pico2w`-style
-   wrapper around the real firmware's `-DPICO_BOARD=...` CMake flag (separate from
-   `harness/build.sh`, which only builds the desktop harness). Convenience, not urgent — board
-   support itself already works via a plain CMake flag.
+~~4. Firmware board-target build wrapper~~ — **DONE 2026-08-17.** `firmware/build.sh` (new) wraps
+   `pico-rv32ima`'s per-board CMake build; `firmware/build.sh` with no args builds all four
+   boards, `firmware/build.sh pico2_w` builds just one. Output goes to `firmware/out/*.uf2`
+   (gitignored, matching the "binaries are GitHub releases, not git history" convention). Verified
+   by actually running it for all four boards — output sizes match the earlier board-support audit
+   exactly (140800/138240/131584/131584 bytes). Real hardware flashing still not attempted
+   (D-005/hardware-parked still applies) — this only builds the `.uf2`, doesn't touch a device.
 5. **Backlog, lower priority, not scoped in detail:**
    - MicroPython (unix port) as a bigger showcase app than nano — real complexity (tens of
      thousands of lines, own build system, unconfirmed risk that its GC heap assumes `mmap()`-backed

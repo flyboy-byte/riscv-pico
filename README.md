@@ -93,18 +93,25 @@ git clone -b 2.1.1 --depth 1 https://github.com/raspberrypi/pico-sdk.git ~/pico-
 git -C ~/pico-sdk submodule update --init --depth 1 lib/tinyusb
 ```
 
-Then, from either project's directory:
+`pico-rv32ima` builds clean for all four board targets (`pico`, `pico_w`, `pico2`, `pico2_w`) —
+build all of them, or just one:
+
+```sh
+firmware/build.sh              # all four, into firmware/out/*.uf2
+firmware/build.sh pico2_w      # just one
+```
+
+Or drive `cmake` directly (same thing the script wraps), from `upstream/pico-rv32ima/`:
 
 ```sh
 cmake -B build -DPICO_SDK_PATH=$HOME/pico-sdk -DPICO_BOARD=pico   # or pico_w / pico2 / pico2_w
 cmake --build build -j$(nproc)
 ```
 
-`pico-rv32ima` builds clean for all four board targets — prebuilt `.uf2`s for each are in the
+Prebuilt `.uf2`s are also in the
 [`pico-rv32ima-boards-v1`](https://github.com/flyboy-byte/riscv-pico/releases/tag/pico-rv32ima-boards-v1)
-release if you'd rather skip the build. Output is `build/pico-rv32ima/pico-rv32ima.uf2` (~140 KB).
-Flash by holding BOOTSEL while plugging in the Pico — it mounts as a USB drive called `RPI-RP2` —
-then copy the `.uf2` onto it.
+release if you'd rather skip building. Output is ~140 KB. Flash by holding BOOTSEL while plugging in
+the Pico — it mounts as a USB drive called `RPI-RP2` — then copy the `.uf2` onto it.
 
 `pico-rv32ima` wants `IMAGE`/`DTB`/`ROOTFS` in the root of a FAT16/FAT32 SD card (same images as
 above). `pico-linux` instead wants a single `Image` file, already shipped at

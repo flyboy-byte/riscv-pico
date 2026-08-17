@@ -1,7 +1,14 @@
 # Pico SDK / CMake build output
 build/
 build_debug/
+build_pico/
+build_pico_w/
+build_pico2/
+build_pico2_w/
 *.uf2.bak
+
+# firmware/build.sh output (real hardware UF2s)
+firmware/out/
 
 # VS Code
 .vscode/
