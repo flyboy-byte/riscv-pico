@@ -6,27 +6,65 @@ Living state document. Current reality, not a task list.
 run live in the desktop harness. Nano's SIGILL crash, the read-only rootfs, and the Enter-key bug
 are all root-caused and fixed. The desktop app is a real menu-bar app (reboot, RAM-config switch,
 disk picker, TTY-size sync). `pico-rv32ima` builds clean for all four board targets (`pico`,
-`pico_w`, `pico2`, `pico2_w`). The guest kernel has a working TCP/IP stack (loopback-verified). All
-build outputs are published as GitHub releases, not committed to git. Real hardware parked until
-further notice. (2026-08-16)
+`pico_w`, `pico2`, `pico2_w`). The guest kernel has a working TCP/IP stack (loopback-verified) and a
+second HVC channel for the SLIP bridge — guest→host byte transfer works, host→guest is blocked on an
+unresolved console-freeze bug (see open item #1). All build outputs are published as GitHub
+releases, not committed to git. Real hardware parked until further notice. (2026-08-17)
 
 ## Open items, prioritized
 
-1. **SLIP guest↔host bridge — the natural next step, not started.** Kernel networking is built and
-   loopback-verified (see "Networking for the guest" below); what's missing is an actual link out of
-   the emulator. Concrete plan: a new kernel patch (alongside
-   `buildroot_overlay/board/tiny-rv32ima/patches/linux/6.6.18/0001-mini-rv32ima-HVC-driver.patch`)
-   registering a second `hvc_alloc(1, ...)` port bound to CSR pair `0x141`/`0x142` (confirmed free
-   against both `tiny-rv32ima/emulator/emulator.c` and both `hal_csr.h` files), plus a real
-   implementation of `harness/hal_csr.h`'s `custom_csr_write`/`custom_csr_read` (currently a no-op
-   stub) bridging that CSR pair to a host PTY, so `slattach` on the guest and a matching SLIP setup
-   on the host can be tested end to end in the desktop harness before any RP2350/cyw43 work.
-2. **ext2 corruption on abrupt kill, with root now `rw` — real bug, not fixed.** Killing the emulator
-   mid-session (closing the app, `timeout` in tests) can leave the rootfs with `EXT2-fs: error:
-   ext2_lookup: deleted inode referenced`, accumulating across repeated abrupt kills on the same disk
-   image. Needs either a clean-shutdown path (flush + sync before terminating the subprocess) or
-   accepting periodic `e2fsck`/disk-image resets during heavy iteration. Found and reproduced
-   2026-08-16 during networking test iteration.
+1. **SLIP guest↔host bridge, Phase 1 — half-working, one real bug found and NOT fixed. Read the
+   whole entry before touching this again.** (2026-08-17)
+   - **`guest → host` byte transfer: done and verified.** `harness/netchan.c` (new) opens a PTY at
+     harness startup (`harness/main.c`, before `vm_init_hw()` — the emulator core is vendored/
+     pristine and can't be touched per D-003) and implements `hal_csr.h`'s `custom_csr_write`/
+     `custom_csr_read` for CSR pair `0x141`/`0x142` (confirmed free; needed **zero core
+     `emulator.c` changes** — `HandleOtherCSRWrite`/`Read` already fall through to
+     `custom_csr_write`/`custom_csr_read` for any CSR they don't recognize). Kernel side is a new
+     patch, `0003-second-hvc-channel.patch`, adding a second `hvc_alloc(1, ...)` port (`/dev/hvc1`
+     in the guest) alongside the existing console. Verified with a real byte round-trip
+     (`echo -n X > /dev/hvc1` on the guest, read back on the host's PTY — exact bytes arrive).
+   - **Real bug found and fixed along the way: PTY canonical-mode buffering.** A fresh PTY defaults
+     to canonical (cooked) line discipline, which buffers writes until a newline — SLIP framing has
+     none, so every byte would sit stuck, invisible to any reader. Fixed with `cfmakeraw()` on the
+     slave side in `netchan_init()`, before closing our reference to it.
+   - **Real bug found and fixed: `get_chars()` for the second port was never called, at all.**
+     `khvcd` (the hvc framework's polling kthread) blocks indefinitely once idle and only wakes via
+     `hvc_kick()`. The console port stays kicked by its own printk/typing activity; this second
+     channel's data arrives from *outside the kernel entirely* (the host's PTY write), so nothing
+     inside the kernel ever kicked it. Fixed with a periodic (50ms) kernel timer in the patch that
+     calls `hvc_kick()`. Confirmed via `pr_info` instrumentation: zero `get_chars2()` calls before
+     this timer, real calls afterward.
+   - **`host → guest`: NOT working. Real bug found, NOT fixed, root cause NOT confirmed.** Once
+     something on the guest actively reads `/dev/hvc1` (e.g. `cat /dev/hvc1 &`), the *primary
+     console* (`/dev/hvc0`) goes completely unresponsive — not slow, fully silent, no further shell
+     input processed at all. This is a new, different bug from the two above, most likely a
+     `khvcd` livelock/starvation between the two polled ports (see the comment above the kick timer
+     in `hvc_riscv_minirv32.c` for the specific hypothesis — untested). **Next session: test with
+     the second port allocated but never opened, to isolate whether allocation alone triggers it or
+     it genuinely needs an active reader; then look at whether the timer's 50ms period or
+     `__hvc_poll()`'s unconditional `poll_mask |= HVC_POLL_READ` for polled ports is the actual
+     mechanism.** Nothing reads `/dev/hvc1` automatically today, so this doesn't affect normal use
+     of the current image — full regression pass (clean boot, nano round-trip, loopback ping) all
+     still pass clean against this exact kernel build.
+   - Kernel+rootfs republished as `net-v1` (now titled "v2, second HVC channel"); harness binaries
+     republished to `rv32harness-v1`. Buildroot checkout with the working patch lives at
+     `/home/logan/.riscv-pico-scratch/repo/buildroot` (see "Reusable build environment" above).
+   - **Phase 2 (real `slattach`/`ifconfig sl0` bring-up, needs `CAP_NET_ADMIN`) is still blocked on
+     Phase 1's console-freeze bug** — `slattach` itself would trigger an active read on `/dev/hvc1`.
+2. **ext2 corruption on abrupt kill, with root now `rw` — real bug, PARTIALLY fixed.** Killing the
+   emulator mid-session (closing the app, `timeout` in tests) can leave the rootfs with `EXT2-fs:
+   error: ext2_lookup: deleted inode referenced`, accumulating across repeated abrupt kills on the
+   same disk image — reproduced live during 2026-08-16/17 testing, and traced to routine boot-time
+   writes (`/run/utmp`, a failed `modprobe`'s `modules.dep.bb`) getting caught mid-write. Real
+   partial fix shipped: `desktop_terminal.py` now sends `sync` to the guest before terminating on
+   reboot/RAM-switch/disk-switch/window-close (`_sync_and_terminate()`, only when idle at the
+   prompt — same safety check as the resize-sync path, never types into a running program). Note:
+   this needed `CONFIG_SYNC`/`CONFIG_DD`/`CONFIG_PRINTF` enabled in busybox — they weren't, so the
+   very first version of this fix silently no-op'd (`sync` didn't exist in the guest at all). Not a
+   complete fix — `sync` only helps at the moments the desktop app controls (reboot/close); an
+   external kill (crash, `kill -9` from outside the app) still corrupts. `disk.img` itself was
+   found corrupted and repaired (`e2fsck -y`) twice this session.
 3. **`UART_TX_PIN` (GPIO0) collides with `SD_SPI_PIN_CS` (GPIO0) in `pico-rv32ima/hw_config.h` — real
    landmine, not fixed.** Currently harmless only because `CONSOLE_UART` defaults to `0` (disabled);
    flipping it on for hardware bring-up debugging would silently break the SD card with no error.

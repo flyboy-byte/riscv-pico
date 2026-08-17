@@ -34,6 +34,7 @@ import json
 import subprocess
 import sys
 import threading
+import time
 from pathlib import Path
 
 import pyte
@@ -456,11 +457,21 @@ class MainWindow(QMainWindow):
         cols, rows = self.term.screen.columns, self.term.screen.lines
         self._send_input(f"export COLUMNS={cols} LINES={rows}\n".encode())
 
+    def _sync_and_terminate(self):
+        # ext2 has no journal: killing the emulator mid-write (even from routine boot-time
+        # writes like /run/utmp) leaves dangling inodes that accumulate across restarts. Give
+        # the guest a chance to flush first — but only when idle at the prompt, same safety
+        # check the resize-sync path uses, so this never types into a running program.
+        if self.io and self._env_synced and self._tail.endswith(SHELL_PROMPT):
+            self._send_input(b"sync\r")
+            time.sleep(0.3)
+        if self.io:
+            self.io.terminate()
+
     def _restart(self, binary=None, disk_img=None):
         binary = binary or self._current_binary()
         disk_img = disk_img if disk_img is not None else self.disk_img
-        if self.io:
-            self.io.terminate()
+        self._sync_and_terminate()
         self.term.reset()
         self._start(binary, disk_img)
         self.term.setFocus()
@@ -515,8 +526,7 @@ class MainWindow(QMainWindow):
         self.status.showMessage("harness exited")
 
     def closeEvent(self, ev):
-        if self.io:
-            self.io.terminate()
+        self._sync_and_terminate()
         super().closeEvent(ev)
 
 

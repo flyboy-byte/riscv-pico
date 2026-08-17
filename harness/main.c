@@ -2,6 +2,7 @@
 
 #include "emulator.h"
 #include "harness_disk.h"
+#include "netchan.h"
 
 int main(int argc, char **argv)
 {
@@ -18,6 +19,7 @@ int main(int argc, char **argv)
         return 1;
     }
 
+    netchan_init();
     vm_init_hw();
 
     int vm_state = EMU_GET_SD;
