@@ -2,88 +2,65 @@
 
 Living state document. Current reality, not a task list.
 
-**Status: full cross-compile pipeline proven — wrote, compiled, and ran real programs (hello world,
-Tiny BASIC, real GNU nano 7.2) in the harness. Nano's SIGILL crash root-caused and fixed
-(`package/Makefile.in`'s `-fPIC`→`-fPIE -pie`), and two follow-up bugs found via live use (read-only
-rootfs, Enter key not registering in nano) are also fixed and verified — see "Next session starts
-here" below. Desktop app polish (menu bar, RAM-config switch, reboot, TTY-size sync) built and had
-two real bugs found and fixed (stale COLUMNS after plain window resize; resize-triggered sync
-spamming during a drag). Multi-chip PSRAM port done in software. **`pico-rv32ima` now builds clean
-for all four board targets** (`pico`, `pico_w`, `pico2`, `pico2_w`) — one small compat fix needed
-(`PICO_DEFAULT_LED_PIN` doesn't exist on `_w` boards, guarded with `#ifdef` in `main.c`/`hal_sd.h`),
-software-only, no hardware touched. **Guest kernel networking built and verified** (`CONFIG_NET`/
-`INET`/`UNIX`/`PACKET`/`SLIP` + busybox `ifconfig`/`route`/`ping`/`slattach`) — loopback ping works
-end to end in the harness; the actual SLIP-over-second-HVC-channel guest↔host bridge is still not
-built (that part remains scoped, not implemented). All build outputs published as GitHub releases,
-not committed to git. Real hardware parked until further notice. (2026-08-16)**
+**Status: full cross-compile pipeline proven** — hello world, Tiny BASIC, and real GNU nano 7.2 all
+run live in the desktop harness. Nano's SIGILL crash, the read-only rootfs, and the Enter-key bug
+are all root-caused and fixed. The desktop app is a real menu-bar app (reboot, RAM-config switch,
+disk picker, TTY-size sync). `pico-rv32ima` builds clean for all four board targets (`pico`,
+`pico_w`, `pico2`, `pico2_w`). The guest kernel has a working TCP/IP stack (loopback-verified). All
+build outputs are published as GitHub releases, not committed to git. Real hardware parked until
+further notice. (2026-08-16)
 
-**Next session starts here** — the two bugs noted last session are now fixed and verified
-(2026-08-16, later pass):
+## Open items, prioritized
 
-1. **Root filesystem was read-only — fixed.** `KERNEL_CMDLINE` in `harness/vm_config.h` now has
-   `rw` appended (`"console=hvc0 root=fe00 rw"`), harness-only change (upstream `vm_config.h` left
-   untouched per the scope fence). Verified: `mount` inside the guest now shows
-   `/dev/root on / type ext2 (rw,relatime,...)` (was `ro`), and a scripted nano
-   write→save→exit→`cat` round-trip confirms content actually persists (previously nano's "Save
-   modified buffer?" prompt kept reappearing because the write silently failed).
-2. **Enter key in nano — fixed.** `desktop_terminal.py`'s `KEY_TO_BYTES` now maps
-   `Key_Return`/`Key_Enter` to `b"\r"` instead of `b"\n"` (raw-mode ncurses treats `\n` as literal
-   Ctrl+J). Verified via the same scripted round-trip: typing `line1\rline2\r` inside nano produced
-   two real lines, not a stuck cursor / unbound-key beep.
-   Both fixes tested process-level (spawning `rv32harness-16mb` directly, feeding stdin, reading
-   stdout) rather than through the Qt GUI — same binary/pipe path the app uses, just without needing
-   a display.
-
-The fixed `nano` (and the rebuilt harness binaries, now baking in the `rw` cmdline) have been
-republished: `apps-v1`'s `riscv32-tinyrv32ima-apps-v1.tar.gz` and `rv32harness-v1`'s
-`rv32harness-linux-x86_64-v1.tar.gz` were both re-uploaded with `--clobber` and spot-checked
-post-upload (md5 match on the downloaded nano). The `package/Makefile.in` buildroot patch itself
-is still only in ephemeral scratch — reapply it if buildroot gets re-cloned fresh (patch is in the
-"Real GNU nano" section below).
-
-**Pico 2 / RP2350 (2W) board support — done in software (2026-08-16, later pass).** All four board
-targets (`pico`, `pico_w`, `pico2`, `pico2_w`) now `cmake --build` clean with SDK 2.1.1, verified by
-actually running the builds (not just reading CMake config), not just reasoning about it on paper.
-One real, small fix was needed: `_w` boards have no `PICO_DEFAULT_LED_PIN` (LED lives on the CYW43
-wireless chip, not a GPIO) — `main.c`'s boot-LED init and `hal/hal_sd.h`'s `sd_led_on`/`sd_led_off`
-macros both referenced it unconditionally, now guarded with `#ifdef PICO_DEFAULT_LED_PIN` (no-op on
-`_w` boards). Three call sites total, nothing else touched — emulator/PSRAM code untouched. RP2350's
-overclock path (`PICO_RP2350A` branch in `main.c`) already existed and needed no change. PIO count
-was the one flagged unknown going in; the build didn't surface any PIO-related error, so it's not a
-blocker either (not yet stress-tested against actual PIO usage at runtime, but nothing failed at
-compile/link time where a PIO-count mismatch would show up as a static assert). `pico2`/`pico2_w`
-link fine even though this SDK's cyw43-driver/lwIP submodules aren't initialized here (shallow SDK
-clone, tinyusb-only) — that's fine because `pico-rv32ima` doesn't use CYW43 yet; wireless itself is
-still the separate, still-open "networking for the guest" item below. All four `.uf2`s published to
-GitHub release `pico-rv32ima-boards-v1`. **No hardware touched or flashed — software build
-verification only**, per the standing hardware-parked constraint.
-
-**Networking, later same day: kernel side done (loopback verified), SLIP bridge still not built.**
-See "Networking for the guest" section below for the full update. Next concrete step: implement the
-second HVC channel — a kernel patch (new file alongside
-`buildroot_overlay/board/tiny-rv32ima/patches/linux/6.6.18/0001-mini-rv32ima-HVC-driver.patch`,
-registering a second `hvc_alloc(1, ...)` port bound to a new CSR pair — `0x141`/`0x142` are free,
-checked against both `tiny-rv32ima/emulator/emulator.c`'s existing CSR usage and both
-`hal_csr.h`/`hal/hal_csr.h` custom-CSR hooks) plus a harness-side `custom_csr_write`/
-`custom_csr_read` implementation in `harness/hal_csr.h` (currently a pure no-op stub) bridging that
-CSR pair to a host PTY, so `slattach` on the guest and a matching SLIP setup on the host side can
-actually be tested end to end on the desktop harness before any RP2350/cyw43 work. Not started.
+1. **SLIP guest↔host bridge — the natural next step, not started.** Kernel networking is built and
+   loopback-verified (see "Networking for the guest" below); what's missing is an actual link out of
+   the emulator. Concrete plan: a new kernel patch (alongside
+   `buildroot_overlay/board/tiny-rv32ima/patches/linux/6.6.18/0001-mini-rv32ima-HVC-driver.patch`)
+   registering a second `hvc_alloc(1, ...)` port bound to CSR pair `0x141`/`0x142` (confirmed free
+   against both `tiny-rv32ima/emulator/emulator.c` and both `hal_csr.h` files), plus a real
+   implementation of `harness/hal_csr.h`'s `custom_csr_write`/`custom_csr_read` (currently a no-op
+   stub) bridging that CSR pair to a host PTY, so `slattach` on the guest and a matching SLIP setup
+   on the host can be tested end to end in the desktop harness before any RP2350/cyw43 work.
+2. **ext2 corruption on abrupt kill, with root now `rw` — real bug, not fixed.** Killing the emulator
+   mid-session (closing the app, `timeout` in tests) can leave the rootfs with `EXT2-fs: error:
+   ext2_lookup: deleted inode referenced`, accumulating across repeated abrupt kills on the same disk
+   image. Needs either a clean-shutdown path (flush + sync before terminating the subprocess) or
+   accepting periodic `e2fsck`/disk-image resets during heavy iteration. Found and reproduced
+   2026-08-16 during networking test iteration.
+3. **`UART_TX_PIN` (GPIO0) collides with `SD_SPI_PIN_CS` (GPIO0) in `pico-rv32ima/hw_config.h` — real
+   landmine, not fixed.** Currently harmless only because `CONSOLE_UART` defaults to `0` (disabled);
+   flipping it on for hardware bring-up debugging would silently break the SD card with no error.
+   Blocked on finding a genuinely free UART0-capable alternate pin — needs the real RP2040 datasheet
+   §1.4.3 GPIO function table (GPIO16/17 also work for UART0 but are already taken by VGA sync here).
+   Software-fixable without hardware once the right pin is confirmed; final verification needs
+   hardware. Found 2026-08-15, still open.
+4. **Firmware board-target build wrapper — scoped, not built.** A `build.sh --board=pico2w`-style
+   wrapper around the real firmware's `-DPICO_BOARD=...` CMake flag (separate from
+   `harness/build.sh`, which only builds the desktop harness). Convenience, not urgent — board
+   support itself already works via a plain CMake flag.
+5. **Backlog, lower priority, not scoped in detail:**
+   - MicroPython (unix port) as a bigger showcase app than nano — real complexity (tens of
+     thousands of lines, own build system, unconfirmed risk that its GC heap assumes `mmap()`-backed
+     paging under no-MMU Linux). Would need a `mmap`-dependency scoping pass before committing.
+   - A from-scratch terminal game or Lua interpreter — nano already proves full-screen apps work, so
+     this is now just "another demo app," not a capability unlock.
+   - Throttling the harness to real hardware instruction-per-second speed — blocked on having a real
+     hardware IPS number to calibrate against, which needs hardware bring-up first (parked).
+   - Bare-metal (non-Linux) firmware targeting this emulator's exact memory map — unexplored,
+     nobody's asked for it, purely speculative.
 
 **Reusable build environment for future kernel/rootfs rebuilds:** buildroot lives at
 `/home/logan/.riscv-pico-scratch/repo/buildroot` (~8GB, includes a working host toolchain — reuse
-this rather than re-cloning). **Hard lesson from this session, worth reading before touching it
-again:** don't build here from inside the session's tmpfs scratchpad (`/tmp/claude-1000/.../
-scratchpad/`) — it's only 7.5GB and a full kernel+host-GCC build blows straight through it,
-locking up the shell tool itself (every command fails with ENOSPC on its own bookkeeping, not just
-the build). Build from real disk. Also: pre-built host binaries bake in an absolute RPATH to
-wherever `output/host` physically lives — moving the checkout after a partial build breaks buildroot's
-own `check-host-rpath` sanity check; if relocating mid-build, wipe `output/host` and `output/build`
-first rather than trying to preserve them across the move.
-
-Cleanup done this session: two stale pre-`riscv-pico` scratch clones (`~/pico`, `~/projects/pico`,
-both confirmed clean unmodified upstream checkouts with no local commits) were deleted from the
-filesystem — not part of this repo, just noting it here in case a future session goes looking for
-them.
+this rather than re-cloning). **Hard lesson, worth reading before touching it again:** don't build
+here from inside the session's tmpfs scratchpad (`/tmp/claude-*/.../scratchpad/`) — it's only 7.5GB
+and a full kernel+host-GCC build blows straight through it, locking up the shell tool itself (every
+command fails with ENOSPC on its own bookkeeping, not just the build). Build from real disk. Also:
+pre-built host binaries bake in an absolute RPATH to wherever `output/host` physically lives — moving
+the checkout after a partial build breaks buildroot's own `check-host-rpath` sanity check; if
+relocating mid-build, wipe `output/host` and `output/build` first rather than trying to preserve them
+across the move. The `package/Makefile.in` `-fPIC`→`-fPIE -pie` patch (needed for any package built
+through buildroot's normal recipes on this target) also lives only in this checkout — reapply it
+(see "Real GNU nano" below) if buildroot ever gets re-cloned fresh.
 
 **Desktop harness works.** `harness/` boots the real tiny-rv32ima emulator (custom CSRs and all) to
 a Linux shell prompt natively on this machine — see "Desktop harness" section below for how to run
@@ -242,8 +219,8 @@ a property of the 8 MB image itself, not a harness bug; same thing would happen 
 with one PSRAM chip. Not chased further — the harness's job (iterate on the emulator/cache/PSRAM
 port without hardware) is proven.
 
-Not yet done: no CMakeLists/build script checked in (the harness is one `gcc` line, didn't seem
-worth it yet); disk image build isn't scripted, just documented above.
+~~Not yet done: no CMakeLists/build script checked in~~ — DONE 2026-08-16, see `harness/build.sh`.
+Disk image build still isn't scripted, just documented above.
 
 **16 MB config verified (2026-08-15).** Bumped `harness/vm_config.h` `EMULATOR_RAM_MB` to 16,
 rebuilt, booted the *same* 8 MB-era image unchanged. `cat /proc/meminfo` reports `MemTotal: 14096
@@ -764,7 +741,8 @@ cleanly with `console_task()`.
 User wants the desktop harness to feel like a real software package, not a raw CLI binary. Built
 and smoke-tested (via `QT_QPA_PLATFORM=offscreen`, scripted — window creation, RAM switch actually
 swapping binaries, reboot keeping the subprocess alive, recent-files persistence/ordering, and
-`TerminalWidget.set_size()` all verified; **not yet clicked through by a human in a real session**):
+`TerminalWidget.set_size()` all verified; ~~not yet clicked through by a human in a real
+session~~ — DONE later the same session, live GUI use found and fixed two real bugs, see below):
 
 - **`harness/build.sh`** — new. Builds `rv32harness-8mb` and `rv32harness-16mb` from the same
   source via `-DEMULATOR_RAM_MB=N` (now `#ifndef`-guarded in `harness/vm_config.h` instead of a
@@ -882,19 +860,19 @@ conflicts with what this project's `elf2flt`/gotpic loader actually needs. Patch
 rebuild through the normal `make ncurses nano` path (not just my manual test build), re-injected
 into `harness/disk.img`'s `ROOTFS`, and re-ran the heaviest stress test from this session (typing,
 arrow keys, cut/paste, save) 6 times clean with zero crashes — previously this reproduced reliably
-under real GUI use. **Not yet done:** buildroot itself lives in ephemeral scratch, not this repo, so
-this patch needs to be reapplied if buildroot is re-cloned from scratch in a future session — worth
-turning into a small patch file check into `apps/` or similar if this recurs. The fixed `nano`
-binary in `disk.img` hasn't been republished to the `apps-v1`/`rv32harness-v1` GitHub releases yet.
+under real GUI use. ~~Not yet done: buildroot itself lives in ephemeral scratch, not this repo, so
+this patch needs to be reapplied if buildroot is re-cloned from scratch~~ — still true (patch lives
+only in the scratch checkout, see "Reusable build environment" up top), but ~~the fixed `nano`
+binary in `disk.img` hasn't been republished~~ — DONE, republished to `apps-v1` same session.
 
-**"Pico vs Pico 2 vs 2W toggle" still doesn't live in the desktop app** — confirmed reasoning from
-the scoping stands. The harness is always desktop x86; board selection (`-DPICO_BOARD=...`) is a
-real-hardware CMake build-time concern, a separate axis from anything the terminal GUI controls. A
-`build.sh --board=pico2w`-style wrapper for the *firmware* build (not the harness) would be a nice
-convenience later, not attempted this session.
+**"Pico vs Pico 2 vs 2W toggle" still doesn't live in the desktop app.** The harness is always
+desktop x86; board selection (`-DPICO_BOARD=...`) is a real-hardware CMake build-time concern, a
+separate axis from anything the terminal GUI controls. A `build.sh --board=pico2w`-style wrapper for
+the *firmware* build (not the harness) is tracked as open item #4 above.
 
-**Not yet done:** no human has actually clicked through the new menus in a live PyQt6 window this
-session — only scripted/offscreen verification. `.gitignore` updated (`harness/rv32harness*`,
+~~Not yet done: no human has actually clicked through the new menus in a live PyQt6 window this
+session~~ — DONE later the same session (2026-08-16), found and fixed two real bugs via live use.
+`.gitignore` updated (`harness/rv32harness*`,
 `harness/.recent_disk_images.json`, `__pycache__/`) so none of the build outputs or local state
 land in git, matching the toolchain/apps precedent of publishing binaries as GitHub releases
 instead. Published as
