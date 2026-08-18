@@ -10,7 +10,8 @@ disk picker, TTY-size sync). `pico-rv32ima` builds clean for all four board targ
 second HVC channel for the SLIP bridge — guest→host byte transfer works, host→guest is blocked on an
 unresolved console-freeze bug (see open item #1). The rootfs now also has a real `curl` (HTTP-only
 build) and a hand-written `sysinfo` banner (neofetch-alike, but hush-compatible — real neofetch
-needs bash, which needs an MMU this NOMMU target doesn't have). README.md rewritten (scannable
+needs bash, which needs an MMU this NOMMU target doesn't have — **8MB config no longer boots at
+all now that curl's added, 16MB only, see open item #5**). README.md rewritten (scannable
 highlights + quickstart, a real header image at `docs/images/header.jpg`) and verified rendering
 correctly on GitHub via Playwright. All build outputs are published as GitHub releases, not
 committed to git. Real hardware parked until further notice. (2026-08-17)
@@ -83,7 +84,27 @@ committed to git. Real hardware parked until further notice. (2026-08-17)
    by actually running it for all four boards — output sizes match the earlier board-support audit
    exactly (140800/138240/131584/131584 bytes). Real hardware flashing still not attempted
    (D-005/hardware-parked still applies) — this only builds the `.uf2`, doesn't touch a device.
-5. **Backlog, lower priority, not scoped in detail:**
+5. **8MB RAM config no longer boots — real regression, found by the user 2026-08-17 later same
+   day, fixed as "16MB only" not as "fix 8MB."** Adding `curl` pushed boot-time memory pressure high
+   enough that even the shell itself now fails to spawn on 8MB (`binfmt_flat: Unable to allocate RAM
+   for process text/data, errno -12` for `sh` itself, not just nano like before). Same underlying
+   class of bug already documented (8MB's usable RAM is genuinely ~5.9MB after kernel overhead,
+   confirmed not a harness bug back on 2026-08-15) — just tipped further by curl's footprint.
+   **Not chased further** — 16MB is the only viable config with this rootfs going forward; the
+   desktop app's RAM-config menu still offers 8MB, so this needs a decision (drop the 8MB option
+   from the menu, ship a curl-free 8MB-specific rootfs variant, or leave it and document the
+   limitation) before it's really "done," not just worked around by using 16MB.
+6. **Real process lesson, same incident:** the `harness/disk.img` actually in place had gone stale
+   relative to what testing believed was current — regression tests earlier in the day passed
+   against what was assumed to be the updated file, but the live file the desktop app uses didn't
+   actually have `curl`/`sysinfo` until the user found it broken and this got re-verified and
+   re-injected from the `net-v1` release tarball (the reliable source of truth). Root cause not
+   fully pinned down. **Takeaway for future sessions: after any rootfs rebuild, verify the actual
+   `harness/disk.img` file directly (`debugfs -R "stat usr/bin/<name>" <extracted-rootfs>`), not
+   just a `disk_apptest.img`/`disk_verify.img` copy that gets renamed into place** — confirm the
+   real file the app launches against, right before ending the session, not just at the moment of
+   the fix.
+7. **Backlog, lower priority, not scoped in detail:**
    - MicroPython (unix port) as a bigger showcase app than nano — real complexity (tens of
      thousands of lines, own build system, unconfirmed risk that its GC heap assumes `mmap()`-backed
      paging under no-MMU Linux). Would need a `mmap`-dependency scoping pass before committing.
