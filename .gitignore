@@ -21,8 +21,9 @@ harness/rv32harness*
 harness/*.img
 harness/.recent_disk_images.json
 
-# Downloaded kernel/rootfs images (large, fetched from upstream releases)
-images/
+# Downloaded kernel/rootfs images (large, fetched from upstream releases) - repo-root only,
+# not docs/images/ (checked-in README assets)
+/images/
 *.zip
 
 # buildroot trees (pico-linux)

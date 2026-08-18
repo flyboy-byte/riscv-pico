@@ -1,5 +1,7 @@
 # riscv-pico
 
+![Raspberry Pi Pico W running Linux](docs/images/header.jpg)
+
 RISC-V Linux, running on a Raspberry Pi Pico — by emulating a full RV32IMA CPU on the RP2040
 itself, with SPI PSRAM standing in for system memory and an SD card holding the kernel and rootfs.
 
