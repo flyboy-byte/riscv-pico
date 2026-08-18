@@ -10,8 +10,10 @@ disk picker, TTY-size sync). `pico-rv32ima` builds clean for all four board targ
 second HVC channel for the SLIP bridge — guest→host byte transfer works, host→guest is blocked on an
 unresolved console-freeze bug (see open item #1). The rootfs now also has a real `curl` (HTTP-only
 build) and a hand-written `sysinfo` banner (neofetch-alike, but hush-compatible — real neofetch
-needs bash, which needs an MMU this NOMMU target doesn't have). All build outputs are published as
-GitHub releases, not committed to git. Real hardware parked until further notice. (2026-08-17)
+needs bash, which needs an MMU this NOMMU target doesn't have). README.md rewritten (scannable
+highlights + quickstart, a real header image at `docs/images/header.jpg`) and verified rendering
+correctly on GitHub via Playwright. All build outputs are published as GitHub releases, not
+committed to git. Real hardware parked until further notice. (2026-08-17)
 
 ## Open items, prioritized
 
@@ -104,6 +106,17 @@ relocating mid-build, wipe `output/host` and `output/build` first rather than tr
 across the move. The `package/Makefile.in` `-fPIC`→`-fPIE -pie` patch (needed for any package built
 through buildroot's normal recipes on this target) also lives only in this checkout — reapply it
 (see "Real GNU nano" below) if buildroot ever gets re-cloned fresh.
+
+**Screenshot/verification tooling notes (2026-08-17):** `npx playwright install chromium` works
+fine in this environment without `--with-deps` (that flag needs sudo for system libs, fails
+non-interactively) — good for rendering-verification screenshots of the GitHub-hosted README, not
+just local files. For screenshots of the actual desktop app (a real Wayland window, not a
+webpage): Spectacle (`spectacle -b -n -o <path>`) works for capturing it, but there's no working
+way found yet to *send synthetic keystrokes into it* — `xdotool` only sees X11 windows (this app is
+Wayland-native, doesn't show up), and `ydotool` needs a `ydotoold` daemon that isn't running and
+can't be started without root. If a scripted/composed screenshot of the app mid-interaction
+(running nano, sysinfo, etc.) is ever needed again, that gap needs solving first — or just ask the
+user to drive the interaction and grab the screenshot after.
 
 **Desktop harness works.** `harness/` boots the real tiny-rv32ima emulator (custom CSRs and all) to
 a Linux shell prompt natively on this machine — see "Desktop harness" section below for how to run
