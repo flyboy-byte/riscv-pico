@@ -73,6 +73,11 @@
 // Hardware SPI instance to use for PSRAM
 #define PSRAM_SPI_INST spi1
 
+// PSRAM SPI clock, MHz. 50 is fine once chips are properly soldered down; drop this to
+// ~20 for bring-up on flying leads/breadboard — a chip that fails at 50 and passes at 20
+// is a signal-integrity problem, not a dead chip.
+#define PSRAM_SPI_SPEED_MHZ 20
+
 // Pins for the PSRAM SPI interface
 #define PSRAM_SPI_PIN_CK 10
 #define PSRAM_SPI_PIN_TX 11

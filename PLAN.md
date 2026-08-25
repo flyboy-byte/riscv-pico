@@ -14,7 +14,12 @@ needs bash, which needs an MMU this NOMMU target doesn't have — **8MB config n
 all now that curl's added, 16MB only, see open item #5**). README.md rewritten (scannable
 highlights + quickstart, a real header image at `docs/images/header.jpg`) and verified rendering
 correctly on GitHub via Playwright. All build outputs are published as GitHub releases, not
-committed to git. Real hardware parked until further notice. (2026-08-17)
+committed to git. (2026-08-17)
+
+**Real hardware bring-up started 2026-08-25** — Pico H confirmed alive over USB-CDC, both PSRAM
+chips individually graded good at 20 MHz SPI. One real firmware bug found and fixed
+(`console_panic()` was one-shot, easy to miss entirely — now repeats). SD card next, not yet
+owned. Full detail in "Real hardware bring-up" under "Next steps, in order."
 
 ## Open items, prioritized
 
@@ -159,12 +164,15 @@ it. No hardware needed for any future PSRAM/cache/emulator-core iteration.
 
 ## Hardware on hand
 
-Pico (RP2040) · ST7735 128×160 LCD · a couple of SPI PSRAM chips hand-soldered to DIP adapters,
-**condition unverified** · SD card.
+Pico H (RP2040, 2021, has headers) · ST7735 128×160 LCD · two SPI PSRAM chips (APS6404L, 8-lead
+SOP, QSPI used in standard-SPI mode) — **both individually graded good, 2026-08-25** · a
+5V→3.3V logic level converter (not needed for PSRAM/SD, both 3.3V-native — earmarked for a PS/2
+keyboard later, see "Real hardware bring-up" below) · SD card **not yet acquired** — need a small
+(4–32 GB, SDHC, FAT32) microSD card plus a basic SPI breakout module, neither owned yet.
 
-The PSRAM chips are the main unknown. Previous attempt (Sept 2024) got as far as installing the SDK
-and configuring a build, then stalled — the gap was not knowing what happens after wiring, not the
-wiring itself.
+Previous attempt (Sept 2024) got as far as installing the SDK and configuring a build, then
+stalled — the gap was not knowing what happens after wiring, not the wiring itself. That gap is now
+closed; see "Real hardware bring-up" below.
 
 ## Direction of travel
 
@@ -227,17 +235,67 @@ to the vendored upstream trees — D-003's stated exception point. Split the sam
 
 Ordered so the risky unknowns resolve first and nothing depends on the display working.
 
-1. **Bring-up over USB serial, one PSRAM chip only.** Don't wire the LCD yet. Set
-   `CONSOLE_CDC 1`, `CONSOLE_UART 0`, LCD off, one chip, `PSRAM_SPI_SPEED` ~20 MHz. Flash, open a
-   serial terminal, chase `PSRAM init OK!`. This isolates the one thing that's genuinely uncertain.
-2. **Grade the chips.** Rotate each hand-soldered chip through the same known-good wiring. One
-   flash, and the whole batch gets individually tested instead of guessed at.
+~~1. Bring-up over USB serial, one PSRAM chip only.~~ — **DONE 2026-08-25.**
+~~2. Grade the chips.~~ — **DONE 2026-08-25.** Both real. Full detail in "Real hardware bring-up"
+   below.
 3. **First Linux boot.** SD card FAT32, `IMAGE` + `DTB` + `ROOTFS` in the root. ~30 s to console.
-4. **Second chip → 16 MB.** This is where the multi-chip PSRAM port lands.
+   **Blocked on hardware: no SD card or SPI breakout module owned yet** — see "Hardware on hand."
+4. **Second chip → 16 MB.** This is where the multi-chip PSRAM port lands. Needs `PSRAM_TWO_CHIPS
+   1` in `hw_config.h` plus both chips wired simultaneously (S1 + S2) — not yet done, only tested
+   one chip at a time on the S1 slot so far.
 5. **ST7735 console last.**
 
 Optional but high-leverage, can slot in any time after step 3: **the desktop harness**
 (see CLAUDE.md) — makes steps 4–5 iterable without touching hardware.
+
+### Real hardware bring-up (2026-08-25)
+
+First real hardware session — Pico H, both PSRAM chips, no SD card yet. Console is USB-CDC
+(`CONSOLE_CDC 1` is already `pico-rv32ima`'s default, no config change needed).
+
+- **Pico H confirmed alive.** Flashed stock `firmware/out/pico-rv32ima-pico.uf2` with nothing wired
+  — clean, repeatable `PSRAM ERR` panic over USB-CDC serial confirms clocks/overvolt/USB
+  enumeration/console pipeline all work.
+- **Real bug found and fixed: one-shot panic message.** `console_panic()` (`pico-rv32ima/console/
+  console.c`) printed its message exactly once, then spun silently forever
+  (`while(true) tight_loop_contents();`). If nothing happened to be connected at that exact instant
+  after boot, the message was gone for good — genuinely unrecoverable without a fresh power cycle
+  timed just right. This is exactly what looked like "nothing printed" during initial testing (both
+  `screen` and a raw `pyserial` read came back empty even with DTR explicitly toggled — confirmed via
+  a script that watches for the `/dev/ttyACM*` node to disappear/reappear across a power cycle and
+  opens it the instant permissions allow, still got `b''`). Fixed by making `console_panic()` repeat
+  the message every 1s forever instead of going silent — general bring-up quality-of-life fix, not
+  just a one-off patch to unblock this session.
+- **Added a config knob: `PSRAM_SPI_SPEED_MHZ`** (`hw_config.h`, default 20). Previously hardcoded
+  to 50 MHz directly in `main.c`'s `spi_init()` call with no way to turn it down — bad default for
+  flying-lead/breadboard bring-up per the standing [[hardware-parked]]-era guidance (a chip that
+  fails at 50 and passes at 20 is a signal-integrity problem, not a dead chip). Both chips graded
+  clean at 20 MHz; haven't tried 50 yet since the wiring isn't permanent.
+  Full pin mapping (APS6404L, 8-lead SOP → Pico H GPIO/physical pin): `SCLK`→GPIO10/pin14,
+  `SI`→GPIO11/pin15, `SO`→GPIO12/pin16, `/CE`→GPIO13/pin17 (chip 2 later: GPIO14/pin19), `SIO2`/
+  `SIO3` pulled up to VDD (unused quad-mode lines, must not float), `VDD`→3V3(OUT)/pin36 — no level
+  shifting needed, chip is 3.3V-native, same rail as the Pico's own GPIOs.
+- **Both chips graded good, one at a time on the S1 slot** (not simultaneously — `psram_init()`
+  ANDs both chips' results together when `PSRAM_TWO_CHIPS 1`, so a two-chip failure can't tell you
+  which chip is bad; grading them individually on the same known-good single-chip wiring avoids
+  that ambiguity). Each: reflash unchanged firmware, confirm it gets past `PSRAM ERR` and instead
+  fails at `Error initalizing SD` (expected — no SD card wired yet, that failure mode itself is the
+  pass signal for the PSRAM step). Chip 1 confirmed good, swapped for chip 2 on the same wiring,
+  confirmed good. Not yet tested: both chips wired simultaneously (`PSRAM_TWO_CHIPS 1`, step 4
+  above).
+- **SD card and SPI breakout module: not owned.** Need to buy — small (4–32 GB, SDHC, FAT32,
+  avoid exFAT/SDXC since Petit FatFs here only understands FAT12/16/32) microSD card plus a basic
+  SPI breakout module (either 3.3V-only or the common "5V-compatible" regulator/level-shifter kind,
+  both fine here since it'll be powered from the Pico's 3.3V rail regardless). Wiring already known
+  from `hw_config.h`: `CK`→GPIO2, `MOSI`→GPIO3, `MISO`→GPIO4, `CS`→GPIO0 (shares the pin with
+  `UART_TX_PIN` — harmless as long as `CONSOLE_UART` stays 0, see open item #3).
+- **The 5V→3.3V logic converter bought for this session turned out unneeded for PSRAM/SD** (both
+  3.3V-native, same rail as the Pico) — real find, not wasted though: classic **PS/2 keyboards run
+  their clock/data lines at 5V logic**, and this fork's PS/2 driver (`console/ps2/ps2.c`,
+  `PS2_PIN_DATA`=GPIO26, `PS2_PIN_CK`=GPIO27) is real and already wired into the default
+  `CONSOLE_VGA 1` build — so the converter has a genuine future use once a standalone-display
+  milestone (VGA monitor + PS/2 keyboard, no PC tether) gets picked up. Not started, not urgent —
+  USB-CDC console covers all current bring-up/testing needs at zero extra cost.
 
 ### Desktop harness (built and working, 2026-08-15)
 

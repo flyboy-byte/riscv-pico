@@ -136,10 +136,15 @@ void console_panic(const char *format, ...)
     va_list args;
     va_start(args, format);
     vsprintf(termPrintBuf, format, args);
-    console_puts("PANIC: ");
-    console_puts(termPrintBuf);
     va_end(args);
 
+    // Repeat the message instead of printing once and going silent — a one-shot message
+    // is easy to miss if nothing was connected/DTR-asserted yet at the exact moment of the
+    // panic (common during bring-up, e.g. connecting a serial terminal right after boot).
     while (true)
-        tight_loop_contents();
+    {
+        console_puts("PANIC: ");
+        console_puts(termPrintBuf);
+        sleep_ms(1000);
+    }
 }

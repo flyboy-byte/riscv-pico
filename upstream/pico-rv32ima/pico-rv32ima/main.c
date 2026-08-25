@@ -56,7 +56,7 @@ int main()
     gpio_put(PSRAM_SPI_PIN_S2, true);
 #endif
 
-    spi_init(PSRAM_SPI_INST, 1000 * 1000 * 50);
+    spi_init(PSRAM_SPI_INST, 1000 * 1000 * PSRAM_SPI_SPEED_MHZ);
     gpio_set_function(PSRAM_SPI_PIN_TX, GPIO_FUNC_SPI);
     gpio_set_function(PSRAM_SPI_PIN_RX, GPIO_FUNC_SPI);
     gpio_set_function(PSRAM_SPI_PIN_CK, GPIO_FUNC_SPI);
