@@ -18,8 +18,18 @@ committed to git. (2026-08-17)
 
 **Real hardware bring-up started 2026-08-25** — Pico H confirmed alive over USB-CDC, both PSRAM
 chips individually graded good at 20 MHz SPI. One real firmware bug found and fixed
-(`console_panic()` was one-shot, easy to miss entirely — now repeats). SD card next, not yet
-owned. Full detail in "Real hardware bring-up" under "Next steps, in order."
+(`console_panic()` was one-shot, easy to miss entirely — now repeats). SD card ordered
+2026-08-25, arriving 2026-08-27 — not yet owned. Full detail in "Real hardware bring-up" under
+"Next steps, in order."
+
+**Side experiment while waiting on the SD card (2026-08-26): a spare Pi 4B made to act as a
+fake SD card over SPI, talking directly to the Pico.** Real working proof of concept — full SD
+init handshake + a byte-perfect 512-byte sector read with CRC16 integrity checking, going
+further than the one comparable precedent found online. **Not a path to actually booting
+Linux** — a real boot needs ~126,000 sequential sector reads with zero tolerance for a bad
+one, a different scale of problem than "usually works." Full writeup, working code, and the
+honest ceiling in [`experiments/pi4-sdcard-emulator/README.md`](experiments/pi4-sdcard-emulator/README.md).
+Paused here — SD card takes over once it arrives.
 
 ## Open items, prioritized
 
@@ -296,6 +306,35 @@ First real hardware session — Pico H, both PSRAM chips, no SD card yet. Consol
   `CONSOLE_VGA 1` build — so the converter has a genuine future use once a standalone-display
   milestone (VGA monitor + PS/2 keyboard, no PC tether) gets picked up. Not started, not urgent —
   USB-CDC console covers all current bring-up/testing needs at zero extra cost.
+
+### Side experiment: Pi 4B as a fake SD card (2026-08-26)
+
+While the real SD card/breakout module was in transit, tried wiring a spare Pi 4B directly to
+the Pico and making it answer `mmcbbp.c`'s SD-over-SPI protocol — a Claude session physically
+connected to that Pi ("pi-05") did the Pi-side work, coordinated live with this session over
+`SendMessage`. **Real result, not just a scoping exercise:** full SD init handshake working
+reliably, plus a byte-perfect 512-byte `CMD17` sector read with real CRC16 integrity checking
+and automatic retry — went further than the one comparable precedent found online (a forum
+thread where someone else tried the same idea and never got bidirectional communication
+working). Ruled out the Pi's *hardware* SPI-slave peripheral (BSC) as a genuine dead end first
+(confirmed real electrical signals were reaching the pins via `edge_probe.py`, so it wasn't
+wiring — the peripheral itself just doesn't reliably engage with an external master; matches a
+well-known `pigpio` maintainer's own account of never getting it working). The thing that
+actually worked was a real-time C program bit-banging the SPI slave role directly over GPIO,
+with the SD init handshake reliable at a slowed-down 20kHz clock.
+
+**Not a path to actually booting Linux, and not meant to be** — a real boot needs ~126,000
+sequential sector reads (kernel + rootfs) with zero tolerance for a single bad one, which is a
+different scale of problem than "usually works." This was pursued explicitly as low-stakes
+curiosity while waiting, not as a serious alternative to the real SD module. Full writeup,
+working code (protocol FSM, the C bit-bang transport, tests, the BSC-path diagnostic tooling),
+wiring table, and run instructions are in
+[`experiments/pi4-sdcard-emulator/README.md`](experiments/pi4-sdcard-emulator/README.md) — kept
+because it's a genuinely interesting, reusable result, not because it unblocks anything. The
+Pico-side test client used to validate all of this (`firmware/sdtest/`) is a real, reusable
+diagnostic firmware in its own right — standalone SD-SPI bring-up probe, not the full
+`pico-rv32ima` build, useful for any future SD-wiring debugging regardless of what's on the
+other end of the wire.
 
 ### Desktop harness (built and working, 2026-08-15)
 
