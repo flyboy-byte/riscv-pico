@@ -261,8 +261,15 @@ Ordered so the risky unknowns resolve first and nothing depends on the display w
    root mounted at 15.9 s. See "First Linux boot on real hardware" below.
 ~~4. Second chip → 16 MB.~~ — **DONE 2026-08-27**, same session as step 3. `PSRAM_TWO_CHIPS 1` +
    `EMULATOR_RAM_MB 16`, both chips wired simultaneously, verified under real load.
-5. **ST7735 console last.** ← now the next step. **Read "ST7735 port — pin conflicts found before
-   starting" below first**; it needs a pin reassignment, it is not a drop-in.
+5. **Display / standalone-machine work** ← now the next step. Three independent options, see
+   "Display plans" and "ST7735 port" below:
+   - **SSD1306 status panel** — hardware on hand, ~300 lines of new code. **This is what the user
+     chose to build next (2026-08-27).**
+   - **VGA + PS/2 keyboard** — **zero new code**, `CONSOLE_VGA` is already on. Needs parts ordered
+     (VGA breakout, 3× 330 Ω, PS/2 keyboard; the level shifter is already owned). This is the real
+     standalone milestone.
+   - **ST7735 console** — needs a pin reassignment first, it is *not* a drop-in; display is not
+     currently on hand.
 
 Optional but high-leverage, can slot in any time after step 3: **the desktop harness**
 (see CLAUDE.md) — makes steps 4–5 iterable without touching hardware.
@@ -315,6 +322,72 @@ First real hardware session — Pico H, both PSRAM chips, no SD card yet. Consol
   `CONSOLE_VGA 1` build — so the converter has a genuine future use once a standalone-display
   milestone (VGA monitor + PS/2 keyboard, no PC tether) gets picked up. Not started, not urgent —
   USB-CDC console covers all current bring-up/testing needs at zero extra cost.
+
+### Display plans — SSD1306 status panel, and VGA+PS/2 needs no code (2026-08-27)
+
+Scoped on paper, **nothing built.** Two separate paths, complementary rather than competing.
+
+#### VGA + PS/2 keyboard — already in the firmware, needs parts only
+
+**`CONSOLE_VGA` defaults to `1` and always has** — the VGA console and PS/2 keyboard driver are
+compiled into the firmware currently running on hardware. Nothing has ever been attached. This is
+**zero new code**, just wiring, and it is the real "standalone machine, no PC tether" milestone.
+
+| Signal | Pico | Note |
+| --- | --- | --- |
+| VSYNC | GPIO16 | direct |
+| HSYNC | GPIO17 | direct |
+| R / G / B | GPIO18 / 19 / 20 | **each through a 330 Ω resistor** — upstream README warns omitting these risks monitor damage |
+| PS/2 data | GPIO26 | via level shifter |
+| PS/2 clock | GPIO27 | via level shifter |
+
+Shopping list: DE-15 VGA breakout (or a sacrificed VGA cable), 3× 330 Ω, a PS/2 keyboard. **The
+5V↔3.3V level shifter is already owned** — bought for PSRAM, turned out unnecessary there, and
+this is the future use already flagged for it in "Real hardware bring-up".
+
+**Purchasing gotcha:** buy a *genuine* PS/2 keyboard, not a USB keyboard with a passive purple
+PS/2 adapter. Those adapters only work if the keyboard contains legacy PS/2 fallback silicon,
+which most modern keyboards dropped.
+
+#### SSD1306 128×64 OLED — status panel (hardware on hand)
+
+User has a 0.96" 128×64 **I2C** SSD1306. Not a console — at a 6×8 cell that is a **21×8** grid,
+and 80-column kernel messages wrap to four lines each, so ~2 messages are visible at a time. Good
+as an at-a-glance stats panel, poor as a console. Stays useful after VGA lands.
+
+**Pins: I2C0 on GPIO8 (SDA) / GPIO9 (SCL)** — physical pins 11/12, adjacent, both free. Verified
+against the full map: taken are 0,1 (UART), 2,3,4 (SD), 10–14 (PSRAM), 16–20 (VGA, claimed even
+with no monitor since `CONSOLE_VGA` is 1), 26,27 (PS/2). Leaves 5/6/7 open for the ST7735's
+`RST`/`CS`/`DC` later.
+
+**Why the architecture fits:** core 0 runs nothing but `while(true) console_task();` (`main.c:102`)
+while core 1 runs the emulator, so a display driven from core 0 costs the emulator nothing. And
+`start_vm()` already maintains a 64-bit instruction counter (`core.cyclel`/`cycleh`, advanced by
+`instrs_per_flip` = 4096 per loop, `emulator.c:289-313`) — so **live instructions/sec is already
+measurable and simply never surfaced.** That number is exactly what the parked "throttle the
+harness to hardware speed" idea has been blocked on; today's ~45× figure is a one-boot wall-clock
+ratio, not a real IPS.
+
+**Honest cost: this is new code, not a port.** No SSD1306 driver exists in the tree —
+`pico-displayDrivs` has ST7735/ST7739/ILI9341 only, all SPI colour, and the sole "ssd1306" hit in
+the repo is an inherited comment in the Adafruit-GFX-derived `gfx.c`. GFX's framebuffer is 16-bit
+RGB565 while the SSD1306 is 1-bit mono, so that seam needs a mono path rather than reuse. Estimate
+~250–350 lines: I2C init + command sequence, 1024-byte mono framebuffer, text renderer, and a
+sampler on core 0. `core` may need exposing from `start_vm()` to read the counter (a small
+upstream edit, acceptable under D-006).
+
+Sketch of the intended panel:
+```
+riscv-pico   16MB
+PSRAM  2x OK  20MHz
+SD     mounted
+IPS      1.42 M/s
+up       00:04:11
+mem   2144/13040 KB
+```
+
+**Next action agreed with the user (2026-08-27): build the SSD1306 driver.** VGA/keyboard parts to
+be ordered in parallel since they have shipping lead time.
 
 ### ST7735 port — pin conflicts found before starting (2026-08-27)
 
