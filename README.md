@@ -102,6 +102,7 @@ single-quantity friendly. Prices are as of 2026-08 and will drift.
 | microSD breakout, SPI | 1 | Any 3.3V module labelled `3V3 CS MOSI CLK MISO GND`. |
 | microSD card | 1 | **4–32 GB, FAT32.** Avoid SDXC/exFAT — Petit FatFs here only understands FAT12/16/32. |
 | 10 kΩ resistor | 1 | Pull-up for `SIO2`/`SIO3` on both chips — one resistor covers all four pins. |
+| SSD1306 OLED, 128×64, **I2C** (4-pin) | 0–1 | Optional status panel. Must be the I2C variant, not SPI. |
 | Breadboard + jumper wires | — | |
 
 **Get the `-SN` (SOP-8) suffix, not `-ZR`.** Same die, but `-ZR` is USON-8 — a 3×2 mm leadless
@@ -152,6 +153,21 @@ is the easiest mistake to make here.
 mismatching them is a compile-time `#error`, not a silent address-wrap bug.
 `PSRAM_SPI_SPEED_MHZ` defaults to 20, stable even on flying leads.
 
+**SSD1306 status panel** (optional, 128×64 I2C OLED — code is in, panel not yet verified on
+hardware). Four separate jumpers; there is no free adjacent GPIO pair left on the board:
+
+| Module | Pico |
+| --- | --- |
+| `VCC` | 3V3(OUT) (pin 36) |
+| `GND` | GND (pin 28) |
+| `SDA` | GP28 (pin 34) |
+| `SCL` | GP21 (pin 27) |
+
+Shows RAM/PSRAM config, boot stage, live MIPS, uptime and clock — it's a stats panel, not a
+console. It runs on core 0, which the emulator doesn't use, and it probes at boot: with nothing
+attached the firmware behaves exactly as before. Turn it off entirely with `CONSOLE_OLED 0` in
+`hw_config.h`; if a panel is wired but stays blank, try `OLED_I2C_ADDR 0x3D`.
+
 Card is plain FAT32 with `IMAGE`, `DTB`, `ROOTFS` copied to the root — no special formatting.
 Full bring-up detail, including two false alarms worth not re-chasing, is in
 [PLAN.md](PLAN.md)'s "First Linux boot on real hardware".
@@ -167,8 +183,9 @@ avoids shipping opaque binaries in commits.
 | [`apps-v1`](https://github.com/flyboy-byte/riscv-pico/releases/tag/apps-v1) | Prebuilt `hello`, `basic`, `nano`, `sysinfo` |
 | [`rv32harness-v1`](https://github.com/flyboy-byte/riscv-pico/releases/tag/rv32harness-v1) | Desktop harness binaries, x86_64 Linux |
 | [`net-v1`](https://github.com/flyboy-byte/riscv-pico/releases/tag/net-v1) | Kernel + rootfs — TCP/IP stack, second HVC channel, `curl`, `sysinfo` |
-| [`pico-rv32ima-boards-v2`](https://github.com/flyboy-byte/riscv-pico/releases/tag/pico-rv32ima-boards-v2) | **Prebuilt `.uf2` firmware, all four boards — two-chip 16 MB, verified booting on real hardware.** Plus `sdtest.uf2`, a standalone SD-over-SPI diagnostic. |
+| [`pico-rv32ima-boards-v3`](https://github.com/flyboy-byte/riscv-pico/releases/tag/pico-rv32ima-boards-v3) | **Prebuilt `.uf2` firmware, all four boards — two-chip 16 MB, plus the SSD1306 status panel.** Plus `sdtest.uf2`, a standalone SD-over-SPI diagnostic. |
 
+`pico-rv32ima-boards-v2` is the previous build (16 MB, no status panel) and still boots fine;
 `pico-rv32ima-boards-v1` is superseded — it holds the single-chip 8 MB builds, which were never
 flashed and no longer boot the current rootfs.
 

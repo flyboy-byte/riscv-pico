@@ -6,6 +6,8 @@ add_executable(pico-rv32ima
 	console/terminal/terminal.c
 	console/vga/vga.c
 	console/ps2/ps2.c
+	console/oled/ssd1306.c
+	console/oled/status_panel.c
 	../tiny-rv32ima/psram/psram.c
 	../tiny-rv32ima/emulator/emulator.c
 	../tiny-rv32ima/cache/cache.c
@@ -21,6 +23,7 @@ target_link_libraries(pico-rv32ima
 	pico_unique_id
 	hardware_vreg
 	hardware_spi
+	hardware_i2c
 	hardware_clocks
 	hardware_pio
 	hardware_dma
@@ -33,6 +36,7 @@ target_include_directories(pico-rv32ima PUBLIC
 	hal
 	usb
 	console
+	console/oled
 	../tiny-rv32ima
 )
 

@@ -63,6 +63,40 @@
 /********************************************************/
 
 /******************/
+/* OLED status panel config (SSD1306 128x64, I2C)
+/******************/
+
+// Enable the SSD1306 status panel. Safe to leave on with nothing attached: the driver
+// probes at init and permanently disables itself if the display doesn't ACK, so the
+// firmware behaves identically either way. This is a stats panel, not a console.
+#define CONSOLE_OLED 1
+
+#if CONSOLE_OLED
+
+#define OLED_I2C_INST i2c0
+#define OLED_I2C_ADDR 0x3C // 0x3D on some modules -- check the silkscreen/jumper
+#define OLED_I2C_SPEED_KHZ 400
+
+// Pin choice here is tightly constrained, so don't move these casually. The RP2040 muxes
+// i2c0 onto GPIOs where (n/2) is even and i2c1 where it is odd, with SDA always on an even
+// pin and SCL on the odd pin above it. Once UART (0,1), SD (0,2,3,4), the bit-banged SPI
+// exposed to the guest via CSR 0x180-0x183 (5,6,7,8), PSRAM (10-14) and VGA/PS2
+// (16-20,26,27) have taken theirs, the only free GPIOs are 1, 9, 15, 21, 22 and 28 --
+// which leaves exactly two usable pairs:
+//
+//   i2c0: SDA GP28 (pin 34) / SCL GP21 (pin 27)   <- used here, both on the right edge
+//   i2c1: SDA GP22 (pin 29) / SCL GP15 (pin 20)
+//
+// Note there is no free *adjacent* pair; a 4-pin module needs two separate jumpers.
+// GND is on pin 28 and 3V3(OUT) on pin 36, both next to the pair used here.
+#define OLED_I2C_PIN_SDA 28
+#define OLED_I2C_PIN_SCL 21
+
+#endif
+
+/********************************************************/
+
+/******************/
 /* PSRAM config
 /******************/
 

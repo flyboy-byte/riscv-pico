@@ -261,10 +261,10 @@ Ordered so the risky unknowns resolve first and nothing depends on the display w
    root mounted at 15.9 s. See "First Linux boot on real hardware" below.
 ~~4. Second chip → 16 MB.~~ — **DONE 2026-08-27**, same session as step 3. `PSRAM_TWO_CHIPS 1` +
    `EMULATOR_RAM_MB 16`, both chips wired simultaneously, verified under real load.
-5. **Display / standalone-machine work** ← now the next step. Three independent options, see
+5. **Display / standalone-machine work** ← current step. Three independent options, see
    "Display plans" and "ST7735 port" below:
-   - **SSD1306 status panel** — hardware on hand, ~300 lines of new code. **This is what the user
-     chose to build next (2026-08-27).**
+   - **SSD1306 status panel** — **code DONE 2026-08-27**, builds for all four boards, ships in
+     `pico-rv32ima-boards-v3`. **Open: wire the four jumpers and confirm on the real panel.**
    - **VGA + PS/2 keyboard** — **zero new code**, `CONSOLE_VGA` is already on. Needs parts ordered
      (VGA breakout, 3× 330 Ω, PS/2 keyboard; the level shifter is already owned). This is the real
      standalone milestone.
@@ -349,45 +349,83 @@ this is the future use already flagged for it in "Real hardware bring-up".
 PS/2 adapter. Those adapters only work if the keyboard contains legacy PS/2 fallback silicon,
 which most modern keyboards dropped.
 
-#### SSD1306 128×64 OLED — status panel (hardware on hand)
+#### SSD1306 128×64 OLED — status panel — **BUILT (2026-08-27), not yet run on hardware**
 
-User has a 0.96" 128×64 **I2C** SSD1306. Not a console — at a 6×8 cell that is a **21×8** grid,
-and 80-column kernel messages wrap to four lines each, so ~2 messages are visible at a time. Good
-as an at-a-glance stats panel, poor as a console. Stays useful after VGA lands.
+Written, builds clean for all four boards, boot-tested in the desktop harness (the emulator-side
+changes only). **Not yet verified against a real panel** — that's the open item.
 
-**Pins: I2C0 on GPIO8 (SDA) / GPIO9 (SCL)** — physical pins 11/12, adjacent, both free. Verified
-against the full map: taken are 0,1 (UART), 2,3,4 (SD), 10–14 (PSRAM), 16–20 (VGA, claimed even
-with no monitor since `CONSOLE_VGA` is 1), 26,27 (PS/2). Leaves 5/6/7 open for the ST7735's
-`RST`/`CS`/`DC` later.
+| | |
+| --- | --- |
+| Driver | `upstream/pico-rv32ima/pico-rv32ima/console/oled/ssd1306.{c,h}` |
+| Panel | `upstream/pico-rv32ima/pico-rv32ima/console/oled/status_panel.{c,h}` |
+| Config | `hw_config.h` → `CONSOLE_OLED` block (defaults to **1**) |
+| Cost | +5,808 bytes RAM vs. the previous build (254,332 of 262,144 used; ~7.8 KB free) |
 
-**Why the architecture fits:** core 0 runs nothing but `while(true) console_task();` (`main.c:102`)
-while core 1 runs the emulator, so a display driven from core 0 costs the emulator nothing. And
-`start_vm()` already maintains a 64-bit instruction counter (`core.cyclel`/`cycleh`, advanced by
-`instrs_per_flip` = 4096 per loop, `emulator.c:289-313`) — so **live instructions/sec is already
-measurable and simply never surfaced.** That number is exactly what the parked "throttle the
-harness to hardware speed" idea has been blocked on; today's ~45× figure is a one-boot wall-clock
-ratio, not a real IPS.
+**Wiring — I2C0, SDA GP28 (pin 34), SCL GP21 (pin 27), plus 3V3 (pin 36) and GND (pin 28).**
 
-**Honest cost: this is new code, not a port.** No SSD1306 driver exists in the tree —
-`pico-displayDrivs` has ST7735/ST7739/ILI9341 only, all SPI colour, and the sole "ssd1306" hit in
-the repo is an inherited comment in the Adafruit-GFX-derived `gfx.c`. GFX's framebuffer is 16-bit
-RGB565 while the SSD1306 is 1-bit mono, so that seam needs a mono path rather than reuse. Estimate
-~250–350 lines: I2C init + command sequence, 1024-byte mono framebuffer, text renderer, and a
-sampler on core 0. `core` may need exposing from `start_vm()` to read the counter (a small
-upstream edit, acceptable under D-006).
+⚠️ **This is a correction to the plan recorded earlier the same day**, which said GPIO8/9. That pin
+audit missed the **bit-banged SPI on GPIO 5/6/7/8** — the SPI master the guest kernel drives through
+CSRs `0x180`–`0x183` (`hal/hal_csr.h`), which is a real feature, not dead config. `BB_SPI_MISO` is
+GPIO8, so GPIO8/9 was never free.
 
-Sketch of the intended panel:
+The RP2040 constrains this hard: `i2c0` muxes onto GPIOs where `n/2` is even and `i2c1` where it is
+odd, SDA always on the even pin and SCL on the odd pin above it. After UART (0,1), SD (0,2,3,4),
+bit-banged SPI (5,6,7,8), PSRAM (10–14) and VGA/PS2 (16–20,26,27), the only free GPIOs are
+**1, 9, 15, 21, 22, 28** — which yields exactly two usable pairs:
+
+| Bus | SDA | SCL | |
+| --- | --- | --- | --- |
+| `i2c0` | GP28 (pin 34) | GP21 (pin 27) | **chosen** — both on the right edge, next to GND pin 28 and 3V3 pin 36 |
+| `i2c1` | GP22 (pin 29) | GP15 (pin 20) | the alternative, if 28/21 are ever needed elsewhere |
+
+There is **no free adjacent pair**, so the module's four pins need individual jumpers rather than a
+4-way strip. Both pairs are free on `pico_w`/`pico2_w` too.
+
+**What it shows** (21 columns × 8 rows, refreshed 2 Hz):
+
 ```
-riscv-pico   16MB
-PSRAM  2x OK  20MHz
-SD     mounted
-IPS      1.42 M/s
-up       00:04:11
-mem   2144/13040 KB
+ riscv-pico  rv32ima     <- inverted title bar
+RAM   16 MB / 2 chip
+PSRAM 20 MHz
+STATE running
+SPEED 1.42 MIPS
+INSTR 1247 M
+UP    00:04:11
+CLK   400 MHz
 ```
 
-**Next action agreed with the user (2026-08-27): build the SSD1306 driver.** VGA/keyboard parts to
-be ordered in parallel since they have shipping lead time.
+**Design notes worth not re-deriving:**
+
+- **The 5×8 font already in the tree is a perfect fit.** `console/vga/font.h` stores glyphs
+  column-major with bit 0 at the top — byte-identical to the SSD1306's page layout. So a text row
+  maps 1:1 onto a display page and rendering a character is a 5-byte copy with zero bit twiddling.
+  This is why the driver came in at ~160 lines instead of the estimated 250–350. (Cost: a second
+  1,280-byte copy of the font, since the header declares it `static`.)
+- **Flushing is incremental and dirty-tracked.** A full 1 KB frame at 400 kHz would block core 0 for
+  ~23 ms, which is too long to sit inside the `console_task()` loop that also pumps USB. Instead
+  `ssd1306_flush_step()` pushes one 64-byte chunk (~1.6 ms) per call, and `ssd1306_row()` skips
+  rows whose rendered bytes are unchanged — so the steady state is a handful of chunks per second.
+- **No `snprintf`.** The first version used it and cost **+10.6 KB**: it drags in newlib's
+  `_svfprintf_r` and `_dtoa_r`, which was most of the remaining RAM headroom on this `copy_to_ram`
+  binary. Two hand-rolled ~30-byte helpers (`put_str`/`put_num`) replaced it. Marking them
+  `noinline` and narrowing one 64-bit divide to 32 bits took `status_panel_task` from 2,604 bytes
+  to 640. **If you add formatting here, don't reach for stdio.**
+- **Absent hardware is a non-event.** `ssd1306_init()` probes; no ACK means the driver disables
+  itself permanently and the firmware behaves exactly as before. It also gives up after 16
+  consecutive I2C errors, so a yanked wire can't stall the console loop forever.
+
+**Upstream edits (D-006):** `emulator.c`/`.h` gained `vm_get_instret()` and `vm_get_stage()` plus a
+`vmStage` enum, with the stage set at six points through boot. `vm_get_instret()` retries around a
+torn 64-bit read since core 1 writes the counter while core 0 reads it. No new external symbols, so
+the desktop harness still builds and boots unchanged (verified).
+
+**This unblocks the parked harness-throttle idea.** `SPEED` is a real measured IPS, not the
+one-boot ~45× wall-clock ratio — read it off the panel and the harness can be throttled to match.
+
+**Open: verify on the real panel.** Flash `pico-rv32ima-boards-v3`, wire the four jumpers, confirm
+the title bar and that `SPEED` settles to a plausible number once `STATE` reaches `running`. If the
+panel stays blank, the module is probably at I2C address **0x3D** rather than 0x3C — one line in
+`hw_config.h`.
 
 ### ST7735 port — pin conflicts found before starting (2026-08-27)
 

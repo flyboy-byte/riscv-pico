@@ -109,6 +109,25 @@ struct MiniRV32IMAState core;
 
 const char spinner[] = "/-\\|";
 
+static volatile uint8_t vm_stage = VM_STAGE_INIT;
+
+uint8_t vm_get_stage(void) { return vm_stage; }
+
+// core.cyclel/cycleh is a 64-bit counter written by this core and read by the other one,
+// so a naive read can tear across the halves. Re-read the high word to detect that.
+uint64_t vm_get_instret(void)
+{
+    volatile uint32_t *lo = (volatile uint32_t *)&core.cyclel;
+    volatile uint32_t *hi = (volatile uint32_t *)&core.cycleh;
+    uint32_t h, l;
+    do
+    {
+        h = *hi;
+        l = *lo;
+    } while (h != *hi);
+    return ((uint64_t)h << 32) | l;
+}
+
 uint8_t vm_get_powerstate(void)
 {
     FRESULT rc = pf_open("STAT");
@@ -143,7 +162,10 @@ uint8_t vm_save_powerstate(uint8_t state)
 void vm_init_hw(void)
 {
     if (psram_init())
+    {
+        vm_stage = VM_STAGE_PSRAM_OK;
         console_puts("PSRAM OK\n\r");
+    }
     else
         console_panic("PSRAM ERR\n\r");
 
@@ -161,6 +183,7 @@ void vm_init_hw(void)
     if (rc)
         console_panic("\rError initalizing SD\n\r");
 
+    vm_stage = VM_STAGE_SD_OK;
     console_puts("\rSD init OK\n\r");
 }
 
@@ -199,6 +222,7 @@ int start_vm(int prev_power_state)
         ;
 
     cache_reset();
+    vm_stage = VM_STAGE_LOADING;
 
     if (prev_power_state == EMU_GET_SD)
         prev_power_state = vm_get_powerstate();
@@ -284,6 +308,7 @@ int start_vm(int prev_power_state)
     if (rc)
         console_panic("Error opening block device image\n\r");
 
+    vm_stage = VM_STAGE_RUNNING;
     console_puts("Starting RISC-V VM\n\n\r");
 
     long long instct = -1;
@@ -316,9 +341,11 @@ int start_vm(int prev_power_state)
             instct = 0;
             break;
         case 0x7777:
+            vm_stage = VM_STAGE_HALTED;
             vm_save_powerstate(EMU_REBOOT);
             return EMU_REBOOT; // syscon code for reboot
         case 0x5555:
+            vm_stage = VM_STAGE_HALTED;
             vm_save_powerstate(EMU_POWEROFF);
             return EMU_POWEROFF; // syscon code for power-off
         default:

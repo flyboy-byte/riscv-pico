@@ -10,6 +10,7 @@
 #include "hw_config.h"
 #include "tiny-rv32ima.h"
 #include "console.h"
+#include "status_panel.h"
 
 void core1_entry();
 bool gset_sys_clock_khz(uint32_t freq_khz, bool required);
@@ -93,6 +94,9 @@ int main()
     // Console init
     console_init();
 
+    // Optional SSD1306 status panel. No-op if nothing is on the I2C bus.
+    status_panel_init();
+
     // Second core bringup
     multicore_reset_core1();
     multicore_fifo_drain();
@@ -100,7 +104,10 @@ int main()
 
     // Handle console
     while (true)
+    {
         console_task();
+        status_panel_task();
+    }
 }
 
 void core1_entry()
