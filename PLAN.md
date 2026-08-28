@@ -460,11 +460,14 @@ So a full panel update from the shell is `printf '\f...' > /dev/hvc1`. No ioctl,
 **The keyboard is orthogonal and needs no thought.** PS/2 → core 0 `kb_queue` → CSR `0x140` → guest
 reads it as `hvc0` *input*. Opposite direction, different channel; it never meets the panel.
 
-#### Phase 0 — verify the OLED (user's action, ~10 min) — BLOCKS phases 2, 3, 5
+#### ~~Phase 0 — verify the OLED~~ — **DONE 2026-08-27, first try**
 
-Wire four jumpers (GP28 SDA / GP21 SCL / 3V3 pin 36 / GND pin 28), flash `pico-rv32ima-boards-v3`,
-confirm the inverted title bar appears. **Gate: text on the panel.** If blank, try
-`OLED_I2C_ADDR 0x3D` — that is the usual cause. Phases 1 and 2 do not wait on this.
+Wired GP28 SDA / GP21 SCL / 3V3 pin 36 / GND pin 28, flashed `pico-rv32ima-boards-v3`,
+**panel came up immediately.** Default address `0x3C` was correct; no config change needed.
+Measured display draw **12.2 mA** — 4% of the ~300 mA recommended external budget on 3V3(OUT),
+against ~70-150 mA total for PSRAM + SD + display. Power is a non-issue.
+
+Phases 2, 3 and 5 are unblocked.
 
 #### Phase 1 — the `plain` guest image (no hardware needed)
 
