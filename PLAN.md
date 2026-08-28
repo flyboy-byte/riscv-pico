@@ -382,6 +382,13 @@ a long, easily-misread-as-hung time on hardware.
   recurs, capture the text (`screen`'s `Ctrl+A h` hardcopy) before resetting.
 - Also normal, appears identically in the harness: `modprobe: module 'tinyrv32ima_spi' not found`.
 
+**Published as [`pico-rv32ima-boards-v2`](https://github.com/flyboy-byte/riscv-pico/releases/tag/pico-rv32ima-boards-v2)**
+(2026-08-27) — all four board targets rebuilt with the two-chip 16 MB config, plus `sdtest.uf2`,
+with wiring tables in the bundled `README.txt`. `pico-rv32ima-boards-v1` was edited to carry a
+superseded warning: it holds the single-chip 8 MB builds, which were never flashed *and* no longer
+boot the current rootfs (open item #5). Toolchain (`toolchain-v2`), `apps-v1`, `net-v1` and
+`rv32harness-v1` all confirmed still intact on GitHub the same date.
+
 **Rootfs command inventory** (saves a round of "command not found" — this build is minimal, and
 `df`, `head`, `md5sum`, `grep`, `vi` are all absent):
 ```

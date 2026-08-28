@@ -141,7 +141,10 @@ avoids shipping opaque binaries in commits.
 | [`apps-v1`](https://github.com/flyboy-byte/riscv-pico/releases/tag/apps-v1) | Prebuilt `hello`, `basic`, `nano`, `sysinfo` |
 | [`rv32harness-v1`](https://github.com/flyboy-byte/riscv-pico/releases/tag/rv32harness-v1) | Desktop harness binaries, x86_64 Linux |
 | [`net-v1`](https://github.com/flyboy-byte/riscv-pico/releases/tag/net-v1) | Kernel + rootfs — TCP/IP stack, second HVC channel, `curl`, `sysinfo` |
-| [`pico-rv32ima-boards-v1`](https://github.com/flyboy-byte/riscv-pico/releases/tag/pico-rv32ima-boards-v1) | Prebuilt `.uf2` firmware, all four board targets |
+| [`pico-rv32ima-boards-v2`](https://github.com/flyboy-byte/riscv-pico/releases/tag/pico-rv32ima-boards-v2) | **Prebuilt `.uf2` firmware, all four boards — two-chip 16 MB, verified booting on real hardware.** Plus `sdtest.uf2`, a standalone SD-over-SPI diagnostic. |
+
+`pico-rv32ima-boards-v1` is superseded — it holds the single-chip 8 MB builds, which were never
+flashed and no longer boot the current rootfs.
 
 Grab whichever you need, or build your own — see `apps/`, `firmware/build.sh`, and PLAN.md's
 "Cross-compile toolchain" section.
