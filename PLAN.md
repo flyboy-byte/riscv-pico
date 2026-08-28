@@ -537,8 +537,14 @@ export PATH=$PWD/host/bin:$PATH
 ```
 Deliberately a release asset, not a git commit — keeps `git clone` small and doesn't put an opaque
 x86_64 binary blob in commit history (this repo may get shared; that matters more than usual). The
-build itself still lives in ephemeral session scratchpad and won't survive to a fresh session —
-this section is the from-source recipe, kept for anyone who'd rather build their own than trust a
+build itself lives outside the repo at `/home/logan/.riscv-pico-scratch/repo/buildroot`.
+**Correction, 2026-08-27: it does persist between sessions** — earlier text here claimed it was
+ephemeral scratch that wouldn't survive, and that was wrong. Re-verified working that date: GCC
+13.3.0, `BR2_TOOLCHAIN_BUILDROOT_WCHAR=y`, `elf2flt` present, and the full loop
+(compile `apps/hello.c` → `debugfs` inject → boot in harness → `hello from riscv32 uclibc nommu`)
+runs clean. **Check that path before rebuilding** — a toolchain rebuild is hours and is usually
+unnecessary.
+This section is the from-source recipe, kept for anyone who'd rather build their own than trust a
 downloaded binary (completely reasonable for a compiler), or who's on a different host arch. Every
 failure mode below is already solved, so a from-source rebuild should go straight through without
 the trial-and-error this session had.

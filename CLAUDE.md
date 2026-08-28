@@ -105,8 +105,11 @@ PLAN.md's "Desktop harness" section. `harness/desktop_terminal.py` is a real des
 you type into it — see PLAN.md's "Desktop terminal app" section.
 
 **A real RISC-V cross-compiler for this target has been built and proven** (compile → inject into
-rootfs → boot → run, live in the web console). It's not checked into the repo (lives in ephemeral
-build scratch, has to be rebuilt per session) — the exact recipe, plus two hard-won gotchas about
+rootfs → boot → run, live in the web console). It's not checked into the repo, but **it does
+persist between sessions** at `/home/logan/.riscv-pico-scratch/repo/buildroot` — re-verified
+working 2026-08-27 (GCC 13.3.0, wchar enabled, `elf2flt` present; compiled `apps/hello.c` to a
+valid bFLT and ran it in the harness). **Check that path before rebuilding anything** — a full
+toolchain rebuild is hours of work and is usually unnecessary. The exact recipe, plus two hard-won gotchas about
 not running concurrent `make toolchain` invocations, are in PLAN.md's "Cross-compile toolchain"
 section. Don't rediscover this from scratch — read that section first.
 

@@ -5,13 +5,16 @@
 RISC-V Linux, running on a Raspberry Pi Pico — by emulating a full RV32IMA CPU on the RP2040
 itself, with SPI PSRAM standing in for system memory and an SD card holding the kernel and rootfs.
 
-No hardware required to try it: a desktop build of the real emulator core boots the actual firmware
-kernel to a Linux shell in about a second, in a real terminal app.
+**This works on real hardware** — a Pico H with two SPI PSRAM chips (16 MB) and an SD card boots
+to a Linux shell and runs GNU nano. And you can try it *without* any hardware: a desktop build of
+the real emulator core boots the same kernel to a shell in about a second, in a real terminal app.
 
 ## Highlights
 
-- **Boots real Linux, zero hardware.** `harness/desktop_terminal.py` — a menu-bar app (reboot,
-  RAM-config switch, disk-image picker), not a raw CLI.
+- **Boots Linux on an actual Pico.** 16 MB across two SPI PSRAM chips, kernel and 60 MB rootfs off
+  an SD card, shell in ~16 seconds. Full-screen GNU nano runs and saves files on it.
+- **Boots real Linux with zero hardware, too.** `harness/desktop_terminal.py` — a menu-bar app
+  (reboot, RAM-config switch, disk-image picker), not a raw CLI.
 - **Runs real software on it.** A working cross-compiler wrote and ran a Tiny BASIC interpreter
   and real **GNU nano 7.2**, full-screen editing included — plus `curl` and a hush-compatible
   `sysinfo` (real `neofetch` needs bash, which needs an MMU this target doesn't have).
@@ -86,8 +89,46 @@ USB drive called `RPI-RP2` — then copy the `.uf2` onto it. `pico-rv32ima` want
 `IMAGE`/`DTB`/`ROOTFS` in the root of a FAT16/FAT32 SD card (same images as the quickstart above);
 `pico-linux` wants a single `Image` file, already shipped at `upstream/pico-linux/linux/Image`.
 
-Real hardware bring-up (flashing, PSRAM chip testing) is parked for now — this project's current
-focus is the emulator/toolchain side, which needs none of it.
+### Wiring (verified working, 2026-08-27)
+
+Console is USB-CDC — no extra adapter needed. All parts are 3.3V-native, so no level shifting.
+
+**Two PSRAM chips** (APS6404L / ESP-PSRAM64H, SOP-8). They share the SPI bus and differ only in
+chip-select:
+
+| Chip pin | Signal | Chip 1 | Chip 2 |
+| --- | --- | --- | --- |
+| 1 | `/CE` | GP13 (pin 17) | GP14 (pin 19) |
+| 2 | `SO` | GP12 (pin 16) | GP12 — shared |
+| 5 | `SI` | GP11 (pin 15) | GP11 — shared |
+| 6 | `SCLK` | GP10 (pin 14) | GP10 — shared |
+| 3, 7 | `SIO2`, `SIO3` | → 3V3 via one shared 10 kΩ | same |
+| 4, 8 | `VSS`, `VDD` | GND, 3V3 | GND, 3V3 |
+
+`SIO2`/`SIO3` are unused in SPI mode. Pull them **high**, not low — some pin-compatible parts put
+an active-low `/RESET` or `/HOLD` on `SIO3`. One 10 kΩ for all four pins is fine; nothing ever
+drives them.
+
+**SD card module** (`3V3, CS, MOSI, CLK, MISO, GND`):
+
+| Module | Pico |
+| --- | --- |
+| `CS` | GP0 (pin 1) |
+| `MOSI` | GP3 (pin 5) |
+| `CLK` | GP2 (pin 4) |
+| `MISO` | GP4 (pin 6) |
+
+⚠️ **`MOSI` and `CLK` cross** — the module's header order doesn't match the Pico's pin order. This
+is the easiest mistake to make here.
+
+**The default build is now two-chip / 16 MB** (`PSRAM_TWO_CHIPS 1` in `hw_config.h`,
+`EMULATOR_RAM_MB 16` in `vm_config.h`). For a single 8 MB chip, set both back to `0` and `8` —
+mismatching them is a compile-time `#error`, not a silent address-wrap bug.
+`PSRAM_SPI_SPEED_MHZ` defaults to 20, stable even on flying leads.
+
+Card is plain FAT32 with `IMAGE`, `DTB`, `ROOTFS` copied to the root — no special formatting.
+Full bring-up detail, including two false alarms worth not re-chasing, is in
+[PLAN.md](PLAN.md)'s "First Linux boot on real hardware".
 
 ## Pre-built releases
 
