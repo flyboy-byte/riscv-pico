@@ -542,7 +542,18 @@ Flash B, `plain-v1` on the SD card, confirm `statusd` drives the real OLED.
 
 #### Phase 6 — the glyph-grid refactor (deferred on purpose)
 
-Makes VGA and the OLED each capable of being *either* a console or a status panel.
+**Scope cut by the user, 2026-08-27: a console and a status panel never need to be live at the
+same time.** One display, one role, chosen at config time — VGA-as-console *or* OLED-as-status is
+fine; both simultaneously is explicitly not a requirement.
+
+That removes most of this phase's cost. The expensive part was de-globalising `terminal.c`'s
+cursor/colour/escape state so two terminal instances could coexist; with only ever one live
+renderer, those globals are fine as they are. What's left is a thin `glyph_grid_t` so `panel` and
+`terminal` can each target either backend — roughly **100 lines, not 250–350** — and the VGA
+"console with a status bar" sub-grid idea is dropped entirely.
+
+Makes VGA and the OLED each capable of being *either* a console or a status panel (one at a
+time).
 
 `terminal.c` is already a device-independent VT100 engine that merely writes straight into VGA's
 arrays. Its whole contact surface is ~10 symbols: `VGA_putc/puts/clear/cursor/initDisplay`,
@@ -550,13 +561,10 @@ arrays. Its whole contact surface is ~10 symbols: `VGA_putc/puts/clear/cursor/in
 already use the **same 6×8 cell and the same `font.h`**, which is what makes this natural.
 
 Introduce a `glyph_grid_t` (dims + `put`/`clear`/`cursor` function pointers); VGA and SSD1306 each
-implement it; `terminal` and `panel` each consume one. Then a **sub-grid view** gives VGA rows 0–27
-to the terminal and 28–29 to the panel — i.e. **a full boot console with a permanent status bar**,
-falling out of the abstraction rather than being special-cased.
+implement it; `terminal` and `panel` each consume one. Which renderer is live on which backend is a
+config choice, and only one is live at a time.
 
-Costs, honestly: the work is de-globalising `terminal.c`'s cursor/colour/escape state, ~250–350
-lines touched, mechanical. RAM is a non-issue — an OLED console grid is 21×8 = **168 bytes**, mono
-so no colour buffer.
+RAM is a non-issue — an OLED console grid is 21×8 = **168 bytes**, mono so no colour buffer.
 
 Two things to know: **an OLED console is 21 columns**, so an 80-column kernel message wraps to four
 lines — fine for watching early boot, useless for nano. And **VGA is 53×30, not 80×25**
