@@ -263,8 +263,10 @@ Ordered so the risky unknowns resolve first and nothing depends on the display w
    `EMULATOR_RAM_MB 16`, both chips wired simultaneously, verified under real load.
 5. **Display / standalone-machine work** ← current step. Three independent options, see
    "Display plans" and "ST7735 port" below:
-   - **SSD1306 status panel** — **code DONE 2026-08-27**, builds for all four boards, ships in
-     `pico-rv32ima-boards-v3`. **Open: wire the four jumpers and confirm on the real panel.**
+   - **SSD1306 status panel** — host-side panel **DONE 2026-08-27** (`pico-rv32ima-boards-v3`).
+     Now superseded by a fuller plan: **see "Guest-driven status panel + image split" below**,
+     which is the agreed 6-phase plan covering the guest-driven panel, the `plain` no-network
+     image, the A/B firmware split and the glyph-grid refactor.
    - **VGA + PS/2 keyboard** — **zero new code**, `CONSOLE_VGA` is already on. Needs parts ordered
      (VGA breakout, 3× 330 Ω, PS/2 keyboard; the level shifter is already owned). This is the real
      standalone milestone.
@@ -426,6 +428,160 @@ one-boot ~45× wall-clock ratio — read it off the panel and the harness can be
 the title bar and that `SPEED` settles to a plausible number once `STATE` reaches `running`. If the
 panel stays blank, the module is probably at I2C address **0x3D** rather than 0x3C — one line in
 `hw_config.h`.
+
+### Guest-driven status panel + image split — the agreed plan (2026-08-27)
+
+Design settled in conversation with the user on 2026-08-27. **Nothing below is built yet** except
+where marked. Phase gates are real: you don't advance by writing more docs.
+
+#### The architecture, in one paragraph
+
+**Linux drives the display by writing bytes to a tty.** The guest has no display driver, no I2C, no
+framebuffer. It writes to `/dev/hvc1`, which the emulator turns into CSR `0x141` writes, which core
+0 renders onto whichever backend is configured. Core 1 runs the emulator; core 0 owns every
+physical display. That is why one guest-side path can feed both the I2C OLED and VGA — the guest
+was never coupled to either.
+
+**Verified 2026-08-27 in the harness:** `cat /proc/loadavg > /dev/hvc1` returns 0. `/dev/hvc0`
+through `/dev/hvc7` exist; `/proc/consoles` lists only `hvc0`, so **`hvc1` is a plain tty that will
+not catch kernel spam** — exactly right for a status channel. The guest half of this is already
+done and shipped in `net-v1`.
+
+**Panel protocol** (a byte stream, same shape as the console):
+
+| Byte | Meaning |
+| --- | --- |
+| `\f` | home + clear — begin a new frame |
+| `\n` | next row, wrapping at 21 columns |
+| other | a character |
+
+So a full panel update from the shell is `printf '\f...' > /dev/hvc1`. No ioctl, no library.
+
+**The keyboard is orthogonal and needs no thought.** PS/2 → core 0 `kb_queue` → CSR `0x140` → guest
+reads it as `hvc0` *input*. Opposite direction, different channel; it never meets the panel.
+
+#### Phase 0 — verify the OLED (user's action, ~10 min) — BLOCKS phases 2, 3, 5
+
+Wire four jumpers (GP28 SDA / GP21 SCL / 3V3 pin 36 / GND pin 28), flash `pico-rv32ima-boards-v3`,
+confirm the inverted title bar appears. **Gate: text on the panel.** If blank, try
+`OLED_I2C_ADDR 0x3D` — that is the usual cause. Phases 1 and 2 do not wait on this.
+
+#### Phase 1 — the `plain` guest image (no hardware needed)
+
+Networking comes out of the Pico images. It stays only in the desktop harness and the Pico 2 WH
+image.
+
+- **Kernel** (`buildroot_overlay/board/tiny-rv32ima/linux-nommu.config`): drop `CONFIG_INET`, TCP,
+  UDP, SLIP, `PF_PACKET`. ⚠️ **KEEP the second-HVC-channel patch** (`0003-second-hvc-channel.patch`,
+  `hvc_alloc(1, ...)`). It was built during the networking work but it is *not* networking — it is
+  the status panel's transport. Removing it silently breaks phases 2–5.
+- **Busybox** (`busybox.config`): the applets that annoy us are hand-disabled for size, not missing
+  because of NOMMU. Turn on `PS`, `TOP`, `KILL`, `GREP`, `SED`, `AWK`, `HEAD`, `TAIL`, `WC`, `DF`,
+  `CP`, `MV`, and **`SLEEP`/`USLEEP`** (phase 3 needs a way to not spin). Drop `PING`, `IFCONFIG`,
+  `ROUTE`, `SLATTACH` — the space pays for the rest.
+- Rebuild kernel + rootfs. **This is the expensive step — hours in buildroot.** A cheaper variant
+  exists (strip only the userspace tools, leave the stack compiled in) but it saves no RAM, and the
+  RAM is the point: the network hash tables alone are **~287 KB** of a 13 MB system
+  (`Table-perturb 262144` + TCP/UDP tables 24576, read off the boot log).
+
+**Gate:** harness boots the plain image; `ps` lists processes; `sleep 1` works;
+`echo x > /dev/hvc1` still returns 0. Ship as release `plain-v1`; `net-v1` stays for the harness
+and Pico 2 WH.
+
+#### Phase 2 — panel sink + harness panel emulator (no hardware needed)
+
+- **Firmware `console/oled/panel.c`** — the character sink implementing the protocol above, feeding
+  `ssd1306_row()`.
+- **Firmware `hal_csr.h`** — route `0x141` → `panel_putc()`. Three lines. The harness has done the
+  equivalent since the netchan work (`0x141` → PTY); this is the firmware catching up.
+- **Host keeps ownership until the guest claims it.** Core 0 renders boot stages (`psram ok`,
+  `sd ok`, `loading`) because those happen before init exists. First byte on `0x141` hands the
+  panel to the guest. **No byte for N seconds and the host takes it back and shows
+  `GUEST STALLED 14s`** — that turns the panel into a watchdog display, which is worth more than
+  the stats.
+- **Build a panel emulator into the harness** so the protocol, the layout and phase 3 are all
+  testable with zero hardware. This is the usual harness-first move and it de-risks phase 0: if the
+  physical panel never works, everything else still lands.
+
+**Gate:** `printf '\fhello\n' > /dev/hvc1` in the harness draws on the emulated panel.
+
+#### Phase 3 — `statusd` (needs phases 1 and 2)
+
+**It cannot be a shell loop.** There is no `sleep` in the current rootfs (`CONFIG_SLEEP is not
+set`), so a `while true` loop would spin at 100% on a ~1.4 MIPS machine and starve everything; and
+on NOMMU each iteration vforks and *suspends the parent*. So: a ~60-line C program, one process,
+`nanosleep()` between frames, reading `/proc/{uptime,loadavg,meminfo}` and `rdcycle` for its own
+MIPS, writing one frame to `/dev/hvc1`. Same pipeline as `apps/hello.c`.
+
+Keep it alive with init, not `&`: `::respawn:/usr/bin/statusd` in `/etc/inittab`, next to the shell.
+
+**Gate:** live-updating panel in the harness; rootfs republished.
+
+**What this buys that the host-side panel structurally cannot:** the host sees the emulator from
+outside — cycles, boot stage, uptime. It cannot see load average, process count, free memory, or
+mounted filesystems. Those live in `/proc` and only the guest can read them.
+
+#### Phase 4 — firmware variants A and B
+
+`firmware/build.sh` grows a variant argument; 8 `.uf2`s instead of 4.
+
+- **A — `classic`**: `CONSOLE_OLED 0`, VGA + PS/2 exactly as tvlad's README intends. Minimal
+  divergence from upstream.
+- **B — `panel`**: the phase-2 architecture. VGA + PS/2 still the console.
+
+B is technically a superset of A (the OLED driver disables itself when nothing ACKs), but a clean
+reference build has real value: "does it also break on classic?" is the same isolation trick that
+resolved the `nano` and `df` false alarms.
+
+**Gate:** both variants build for all four boards.
+
+#### Phase 5 — hardware verification
+
+Flash B, `plain-v1` on the SD card, confirm `statusd` drives the real OLED.
+**Gate: the panel updates from inside Linux, on hardware.**
+
+#### Phase 6 — the glyph-grid refactor (deferred on purpose)
+
+Makes VGA and the OLED each capable of being *either* a console or a status panel.
+
+`terminal.c` is already a device-independent VT100 engine that merely writes straight into VGA's
+arrays. Its whole contact surface is ~10 symbols: `VGA_putc/puts/clear/cursor/initDisplay`,
+`termBuf`/`bgColBuf`, `cr_x`/`cr_y`/`fg_col`/`bg_col`, `TERM_WIDTH`/`TERM_HEIGHT`. Both displays
+already use the **same 6×8 cell and the same `font.h`**, which is what makes this natural.
+
+Introduce a `glyph_grid_t` (dims + `put`/`clear`/`cursor` function pointers); VGA and SSD1306 each
+implement it; `terminal` and `panel` each consume one. Then a **sub-grid view** gives VGA rows 0–27
+to the terminal and 28–29 to the panel — i.e. **a full boot console with a permanent status bar**,
+falling out of the abstraction rather than being special-cased.
+
+Costs, honestly: the work is de-globalising `terminal.c`'s cursor/colour/escape state, ~250–350
+lines touched, mechanical. RAM is a non-issue — an OLED console grid is 21×8 = **168 bytes**, mono
+so no colour buffer.
+
+Two things to know: **an OLED console is 21 columns**, so an 80-column kernel message wraps to four
+lines — fine for watching early boot, useless for nano. And **VGA is 53×30, not 80×25**
+(`SCREEN_WIDTH 320 / FONT_WIDTH 6`), so 80-column output wraps there too.
+
+**Deliberately last.** Refactoring `terminal.c` before there is a second working consumer is how
+you get an abstraction that fits exactly one case.
+
+#### Not in scope
+
+- **No MMU work.** The guest has no MMU because `mini-rv32ima` has no `satp` and no S-mode — 21
+  registers, M-mode and U-mode only. Adding Sv32 + S-mode + SBI is a different emulator (TinyEMU),
+  and every load/store would then need a page walk through a software cache over SPI PSRAM.
+  Estimate 2–4× slower; the 16-second boot becomes a minute-plus. Feasible, not worth it.
+- **No RP2350-native port.** Interesting long-term (Hazard3 cores are real RISC-V, native
+  memory-mapped PSRAM, hundreds of times faster than interpreting) but still NOMMU, and a different
+  project.
+- Networking is not removed from the harness or the Pico 2 WH image.
+
+#### Parallel, user's action
+
+Order VGA + PS/2 parts — DE-15 breakout, **3× 330 Ω on R/G/B (omitting them risks monitor
+damage)**, a *genuine* PS/2 keyboard. Level shifter already owned. **VGA needs zero new code** —
+`CONSOLE_VGA` is already 1 and the console driver is in the firmware running on hardware today;
+plug in a monitor and you can watch it boot. Phase 6 only adds the status bar.
 
 ### ST7735 port — pin conflicts found before starting (2026-08-27)
 
