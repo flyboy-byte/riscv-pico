@@ -421,8 +421,22 @@ CLK   400 MHz
 torn 64-bit read since core 1 writes the counter while core 0 reads it. No new external symbols, so
 the desktop harness still builds and boots unchanged (verified).
 
-**This unblocks the parked harness-throttle idea.** `SPEED` is a real measured IPS, not the
-one-boot ~45× wall-clock ratio — read it off the panel and the harness can be throttled to match.
+**MEASURED 2026-08-27, on hardware: `1.47 MIPS`** (two PSRAM chips, `PSRAM_SPI_SPEED_MHZ 20`,
+RP2040 at 400 MHz). First real instruction rate this project has had — everything before was a
+wall-clock stopwatch ratio.
+
+Two things fall out of it:
+
+- **~272 RP2040 clocks per emulated instruction** (400e6 / 1.47e6). A tight interpreter on an M0+
+  should be well under 100; the excess is almost certainly PSRAM access through the software cache,
+  which suggests the emulator is **memory-bound, not interpreter-bound**. That makes
+  `PSRAM_SPI_SPEED_MHZ` the first knob worth trying — it is at 20 for breadboard safety, upstream
+  defaults to 50, and the panel now makes the experiment a flash-and-read.
+- **The harness-throttle idea has a target.** Kernel timestamps track real host time in this
+  emulator (`timing_micros()` drives guest time), so they are directly comparable: root mounts at
+  **15.9 s** on hardware vs **~0.33 s** in the harness — a ~48× ratio, consistent with the earlier
+  ~45× guess. That implies the harness runs at roughly **70 MIPS** (DERIVED, not measured — the
+  clean version is to surface `vm_get_instret()` in the harness too and read it directly).
 
 **Open: verify on the real panel.** Flash `pico-rv32ima-boards-v3`, wire the four jumpers, confirm
 the title bar and that `SPEED` settles to a plausible number once `STATE` reaches `running`. If the
