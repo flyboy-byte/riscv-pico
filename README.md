@@ -89,6 +89,32 @@ USB drive called `RPI-RP2` — then copy the `.uf2` onto it. `pico-rv32ima` want
 `IMAGE`/`DTB`/`ROOTFS` in the root of a FAT16/FAT32 SD card (same images as the quickstart above);
 `pico-linux` wants a single `Image` file, already shipped at `upstream/pico-linux/linux/Image`.
 
+### Parts
+
+Everything below is what's actually on the verified build — roughly **$20** total, no MOQs, all
+single-quantity friendly. Prices are as of 2026-08 and will drift.
+
+| Part | Qty | Notes |
+| --- | --- | --- |
+| Raspberry Pi Pico | 1 | Any variant. Verified on a Pico H (RP2040); firmware also builds for `pico_w`, `pico2`, `pico2_w`. |
+| **APS6404L-3SQR-SN** PSRAM, SOP-8 | 2 | 8 MB each → 16 MB. Sold as [8MB PSRAM at ProtoSupplies](https://protosupplies.com/product/psram/) (~$2.39 ea, single quantity). |
+| [SMD→DIP 8-pin adapter, 5-pack](https://protosupplies.com/product/pcb-smd-soic-8-msop-8-tssop-8-to-dip-adapter5-pack/) | 1 pack | ~$0.79. Headers not included. The chips are surface-mount; these put them on 0.1" pitch for breadboarding. |
+| microSD breakout, SPI | 1 | Any 3.3V module labelled `3V3 CS MOSI CLK MISO GND`. |
+| microSD card | 1 | **4–32 GB, FAT32.** Avoid SDXC/exFAT — Petit FatFs here only understands FAT12/16/32. |
+| 10 kΩ resistor | 1 | Pull-up for `SIO2`/`SIO3` on both chips — one resistor covers all four pins. |
+| Breadboard + jumper wires | — | |
+
+**Get the `-SN` (SOP-8) suffix, not `-ZR`.** Same die, but `-ZR` is USON-8 — a 3×2 mm leadless
+package that's far harder to hand-solder, probe, or rework. Plain `APS6404L-3SQR` with no suffix is
+bare die (KGD), not a packaged part at all.
+
+**Pin-compatible substitutes** work fine — ESP-PSRAM64H, LY68L6400, and IPUS equivalents all share
+the SOP-8 pinout and the `0x5D` known-good-die ID the firmware checks. For stock across
+distributors rather than a single vendor, search [Findchips](https://www.findchips.com/search/APS6404L-3SQR-SN)
+or [Octopart](https://octopart.com/search?q=APS6404L-3SQR-SN).
+
+No level shifter needed — every part here is 3.3V-native and runs off the Pico's own 3V3 rail.
+
 ### Wiring (verified working, 2026-08-27)
 
 Console is USB-CDC — no extra adapter needed. All parts are 3.3V-native, so no level shifting.
