@@ -261,7 +261,8 @@ Ordered so the risky unknowns resolve first and nothing depends on the display w
    root mounted at 15.9 s. See "First Linux boot on real hardware" below.
 ~~4. Second chip → 16 MB.~~ — **DONE 2026-08-27**, same session as step 3. `PSRAM_TWO_CHIPS 1` +
    `EMULATOR_RAM_MB 16`, both chips wired simultaneously, verified under real load.
-5. **ST7735 console last.** ← now the next step.
+5. **ST7735 console last.** ← now the next step. **Read "ST7735 port — pin conflicts found before
+   starting" below first**; it needs a pin reassignment, it is not a drop-in.
 
 Optional but high-leverage, can slot in any time after step 3: **the desktop harness**
 (see CLAUDE.md) — makes steps 4–5 iterable without touching hardware.
@@ -314,6 +315,45 @@ First real hardware session — Pico H, both PSRAM chips, no SD card yet. Consol
   `CONSOLE_VGA 1` build — so the converter has a genuine future use once a standalone-display
   milestone (VGA monitor + PS/2 keyboard, no PC tether) gets picked up. Not started, not urgent —
   USB-CDC console covers all current bring-up/testing needs at zero extra cost.
+
+### ST7735 port — pin conflicts found before starting (2026-08-27)
+
+Scoped on paper, **nothing built, display not on hand.** Recorded so step 5 doesn't open by
+rediscovering this.
+
+**The ST7735 is not special hardware** — a commodity SPI TFT controller (128×160 / 128×128, a few
+dollars, many vendors). It's the chosen display purely because `pico-linux` already ships a working
+driver for it, vendored here at `upstream/pico-linux/pico-displayDrivs/st7735/`, so the port is a
+code-move rather than writing a display driver. Any SPI display with an existing driver would have
+served equally.
+
+**Two real pin collisions with the current verified wiring** (read directly from
+`pico-linux/pico-rv32ima/config/rv32_config.h:138-144` vs our `hw_config.h`):
+
+| `pico-linux` LCD pin | Value | Collides with, in our build |
+| --- | --- | --- |
+| `LCD_PIN_SCK` | GPIO14 | `PSRAM_SPI_PIN_S2` — **PSRAM chip 2 chip-select** |
+| `LCD_PIN_DC` | GPIO4 | `SD_SPI_PIN_RX` — **SD card MISO** |
+| `LCD_PIN_TX` | GPIO15 | free |
+| `LCD_PIN_RST` | GPIO5 | free |
+| `LCD_PIN_CS` | GPIO6 | free |
+
+**This also explains an oddity CLAUDE.md records without a reason** — that `rv32_config.h`
+"silently force-disables the LCD console for 3–4 chip setups" (its Config Checks block `#undef`s
+`CONSOLE_LCD` when `PSRAM_THREE_CHIPS`/`PSRAM_FOUR_CHIPS` is set). The cause is now clear:
+pico-linux assigns `PSRAM_SPI_PIN_S3`=14 and `S4`=15, which are exactly its LCD's `SCK` and `TX`.
+The interlock exists because chips 3–4 eat the display's pins. Not a mystery, just undocumented.
+
+**Why we hit it two chips earlier than pico-linux does:** pico-linux puts chips 1–2 on GPIO21/22,
+leaving 14/15 free for the LCD at two chips. Our multi-chip port (2026-08-15) picked GPIO14 for
+chip 2 — genuinely free at the time, with the display far off — which reintroduces the same
+collision at two chips.
+
+**Fix (software + one jumper, not yet done):** move `PSRAM_SPI_PIN_S2` from GPIO14 to **GPIO21 or
+GPIO22** — both free in our pin map, and what pico-linux itself uses — freeing GPIO14/15 for the
+LCD. Then reassign `LCD_PIN_DC` off GPIO4. Verify against the free-pin list before committing:
+currently taken are 0,1 (UART), 2,3,4 (SD), 10–14 (PSRAM), 16,17,18 (VGA), 26,27 (PS/2).
+Note this changes the hardware-verified wiring, so re-verify the two-chip boot after moving it.
 
 ### First Linux boot on real hardware (2026-08-27)
 
