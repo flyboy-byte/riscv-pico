@@ -68,7 +68,7 @@
 
 // Set to 1 once a second graded-good chip is wired on PSRAM_SPI_PIN_S2. Also bump
 // EMULATOR_RAM_MB in vm_config.h to 16 — see the config check below.
-#define PSRAM_TWO_CHIPS 0
+#define PSRAM_TWO_CHIPS 1
 
 // Hardware SPI instance to use for PSRAM
 #define PSRAM_SPI_INST spi1

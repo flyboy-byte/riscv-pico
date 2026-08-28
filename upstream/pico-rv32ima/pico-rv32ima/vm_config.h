@@ -8,7 +8,7 @@
 #define DTB_SIZE 2048
 
 // RAM size in megabytes
-#define EMULATOR_RAM_MB 8
+#define EMULATOR_RAM_MB 16
 
 // Kernel command line
 #define KERNEL_CMDLINE "console=hvc0 root=fe00"

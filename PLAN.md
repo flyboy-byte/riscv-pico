@@ -2,7 +2,10 @@
 
 Living state document. Current reality, not a task list.
 
-**Status: full cross-compile pipeline proven** — hello world, Tiny BASIC, and real GNU nano 7.2 all
+**Status: booting Linux on real hardware (2026-08-27).** See the hardware milestone note below;
+the rest of this block is the software state as of 2026-08-17 and is still current.
+
+**Full cross-compile pipeline proven** — hello world, Tiny BASIC, and real GNU nano 7.2 all
 run live in the desktop harness. Nano's SIGILL crash, the read-only rootfs, and the Enter-key bug
 are all root-caused and fixed. The desktop app is a real menu-bar app (reboot, RAM-config switch,
 disk picker, TTY-size sync). `pico-rv32ima` builds clean for all four board targets (`pico`,
@@ -18,9 +21,15 @@ committed to git. (2026-08-17)
 
 **Real hardware bring-up started 2026-08-25** — Pico H confirmed alive over USB-CDC, both PSRAM
 chips individually graded good at 20 MHz SPI. One real firmware bug found and fixed
-(`console_panic()` was one-shot, easy to miss entirely — now repeats). SD card ordered
-2026-08-25, arriving 2026-08-27 — not yet owned. Full detail in "Real hardware bring-up" under
-"Next steps, in order."
+(`console_panic()` was one-shot, easy to miss entirely — now repeats). Full detail in "Real
+hardware bring-up" under "Next steps, in order."
+
+**🎉 FIRST LINUX BOOT ON REAL HARDWARE — 2026-08-27.** Both PSRAM chips wired simultaneously
+(16 MB), SD card wired, Linux booted to a shell on the Pico itself. Root mounted at 15.9 s.
+GNU nano runs and saves files on real hardware. Memory verified across the chip-select boundary
+by measurement, not inference. **This closes steps 3 and 4 of "Next steps, in order" in one
+session** — the multi-chip PSRAM port (written 2026-08-15, compile-verified only) is now proven
+on real silicon. Full detail in "First Linux boot on real hardware" below.
 
 **Side experiment while waiting on the SD card (2026-08-26): a spare Pi 4B made to act as a
 fake SD card over SPI, talking directly to the Pico.** Real working proof of concept — full SD
@@ -175,10 +184,10 @@ it. No hardware needed for any future PSRAM/cache/emulator-core iteration.
 ## Hardware on hand
 
 Pico H (RP2040, 2021, has headers) · ST7735 128×160 LCD · two SPI PSRAM chips (APS6404L, 8-lead
-SOP, QSPI used in standard-SPI mode) — **both individually graded good, 2026-08-25** · a
-5V→3.3V logic level converter (not needed for PSRAM/SD, both 3.3V-native — earmarked for a PS/2
-keyboard later, see "Real hardware bring-up" below) · SD card **not yet acquired** — need a small
-(4–32 GB, SDHC, FAT32) microSD card plus a basic SPI breakout module, neither owned yet.
+SOP, QSPI used in standard-SPI mode) — **both graded good individually 2026-08-25, both wired
+simultaneously and verified under load 2026-08-27** · a 5V→3.3V logic level converter (not needed
+for PSRAM/SD, both 3.3V-native — earmarked for a PS/2 keyboard later, see "Real hardware bring-up"
+below) · **14.6 GB microSD card (FAT32) + SPI breakout module — acquired and working 2026-08-27.**
 
 Previous attempt (Sept 2024) got as far as installing the SDK and configuring a build, then
 stalled — the gap was not knowing what happens after wiring, not the wiring itself. That gap is now
@@ -248,12 +257,11 @@ Ordered so the risky unknowns resolve first and nothing depends on the display w
 ~~1. Bring-up over USB serial, one PSRAM chip only.~~ — **DONE 2026-08-25.**
 ~~2. Grade the chips.~~ — **DONE 2026-08-25.** Both real. Full detail in "Real hardware bring-up"
    below.
-3. **First Linux boot.** SD card FAT32, `IMAGE` + `DTB` + `ROOTFS` in the root. ~30 s to console.
-   **Blocked on hardware: no SD card or SPI breakout module owned yet** — see "Hardware on hand."
-4. **Second chip → 16 MB.** This is where the multi-chip PSRAM port lands. Needs `PSRAM_TWO_CHIPS
-   1` in `hw_config.h` plus both chips wired simultaneously (S1 + S2) — not yet done, only tested
-   one chip at a time on the S1 slot so far.
-5. **ST7735 console last.**
+~~3. First Linux boot.~~ — **DONE 2026-08-27.** Booted to a busybox shell on real hardware,
+   root mounted at 15.9 s. See "First Linux boot on real hardware" below.
+~~4. Second chip → 16 MB.~~ — **DONE 2026-08-27**, same session as step 3. `PSRAM_TWO_CHIPS 1` +
+   `EMULATOR_RAM_MB 16`, both chips wired simultaneously, verified under real load.
+5. **ST7735 console last.** ← now the next step.
 
 Optional but high-leverage, can slot in any time after step 3: **the desktop harness**
 (see CLAUDE.md) — makes steps 4–5 iterable without touching hardware.
@@ -306,6 +314,91 @@ First real hardware session — Pico H, both PSRAM chips, no SD card yet. Consol
   `CONSOLE_VGA 1` build — so the converter has a genuine future use once a standalone-display
   milestone (VGA monitor + PS/2 keyboard, no PC tether) gets picked up. Not started, not urgent —
   USB-CDC console covers all current bring-up/testing needs at zero extra cost.
+
+### First Linux boot on real hardware (2026-08-27)
+
+**Linux booted to a shell on the Pico itself, with both PSRAM chips and a real SD card.** Worked on
+the first flash — no debugging cycle needed for either the multi-chip PSRAM port or the SD wiring.
+
+**Config changed** (the only two lines): `PSRAM_TWO_CHIPS 0`→`1` (`hw_config.h`) and
+`EMULATOR_RAM_MB 8`→`16` (`vm_config.h`). Build → 141312-byte `.uf2`, byte-size-identical to the
+compile-only check recorded 2026-08-15, confirming nothing else drifted. `PSRAM_SPI_SPEED_MHZ`
+stayed at 20 — **not** lowered; 20 MHz is stable with both chips on flying leads.
+
+**Wiring.** Chip 2 shares SCLK/SI/SO with chip 1 and differs only in chip-select
+(`/CE`→GPIO14/pin19 vs chip 1's GPIO13/pin17). SD module: `CS`→GPIO0/pin1, `CLK`→GPIO2/pin4,
+`MOSI`→GPIO3/pin5, `MISO`→GPIO4/pin6, 3V3 + GND. Note the module's header order (CS, MOSI, CLK)
+does **not** match the Pico's pin order (CS, CLK, MOSI) — those two wires cross, easiest mistake
+to make here.
+
+**SIO2/SIO3 handling — corrected from earlier sessions.** Both pins on both chips now tie to 3V3
+through a single shared 10 kΩ (four pins on one node, one resistor to the rail). Reasoning, since
+this got argued back and forth: on *this* part they have **no SPI-mode function at all** (datasheet
+Table 2-1 lists `-` for both), unlike SPI-NOR flash where they are /WP and /HOLD. So direction is
+functionally arbitrary here. Pulled **high** anyway because the risk is asymmetric — several
+pin-compatible parts put an active-low /HOLD or /RESET on SIO3, and grounding that would hold such
+a chip permanently in reset, while pulling high is harmless in every case. A shared resistor is
+fine because nothing ever drives these pins: `psram.c` only ever sends `0x66`/`0x99`/`0x9F`/`0x03`/
+`0x0B`/`0x02` (verified by grep), all single-SPI — no `0x35` Enter-Quad-Mode, so the chip never
+drives SIO2/SIO3. Total current through the resistor is leakage only (~8 µA for four pins, ~0.08 mV
+drop). **Note the datasheet's power-up section says `SI/SO/SIO[3:0]` should be low through the
+150 µs init window — that is a sequencing constraint on what the master drives, not a static wiring
+directive** (it also covers SI/SO, which obviously aren't tied low). Chip 1 had run with these pins
+floating in the 2026-08-25 grading session and worked; tying them is an improvement, not a bug fix.
+
+**SD card prep.** Copied `IMAGE`/`DTB`/`ROOTFS` straight out of `harness/disk.img` (the known-good
+`net-v1` contents) onto a stock-FAT32 14.6 GB card — no reformat needed, no `dd` of a raw image.
+Per PLAN.md item #6's standing lesson, verified by **sha256 comparison of each file against the
+source image**, not just size, and confirmed `curl`/`sysinfo`/`nano` present in the ext2 via
+`debugfs -R "stat ..."` before ejecting. All three matched.
+
+**Verified on hardware:**
+- `[mem 0x0000000080000000-0x0000000080ffefff]` in the kernel's own boot log — exactly 16 MB, so
+  both chips are mapped and addressable.
+- `[15.932599] VFS: Mounted root (ext2 filesystem) readonly on device 254:0` — SD served the
+  kernel, DTB and the 60 MB rootfs; `254:0` is `0xfe00`, the custom-CSR block device.
+- `free` reports **13040 KB total** (16384 KB physical, ~3344 KB kernel image + reserved).
+- **Chip 2's data path proven by measurement, not inference.** `dd if=/dev/zero of=/dev/memtest
+  bs=1k count=4000` (devtmpfs is RAM-backed and writable even with root read-only) then `cat` it
+  back: clean, and `free` showed `buff/cache` rise 508→4528 KB and return to 528 KB after `rm`.
+  Peak usage ≈ 3344 KB kernel + 2144 used + 4528 cache ≈ **10016 KB**, against chip 1's 8192 KB
+  capacity — so ≥1.8 MB necessarily lived on chip 2 (pigeonhole, independent of allocator
+  behaviour). Written, read back, and freed with no fault.
+- **GNU nano runs and saves on real hardware** — `/dev/nanotest` read back with its typed contents.
+
+**Real hardware is ~45× slower than the desktop harness** (root mounted at 15.9 s vs 0.34 s on the
+same image). This is the first real calibration number, and it retires the blocker on the parked
+"throttle the harness to hardware speed" idea — see that section, which was waiting on exactly
+this figure. Practical consequence: a full-screen nano redraw that is instant in the harness takes
+a long, easily-misread-as-hung time on hardware.
+
+**Two scares that turned out to be nothing** (recorded so they aren't re-chased):
+- *"nano froze on Ctrl+X."* It hadn't — the saved file was intact with its typed contents. It was
+  the ~45× slowdown on a full-screen redraw.
+- *"`df` kernel panicked."* `df` **does not exist in this rootfs** (confirmed by running the same
+  image in the harness, which prints a clean `sh: can't execute 'df'`). On a healthy boot the
+  hardware prints the identical clean error. Not reproducible; most likely a knock-on from a
+  session already wedged by interrupting nano. **Root cause not confirmed** — if a panic ever
+  recurs, capture the text (`screen`'s `Ctrl+A h` hardcopy) before resetting.
+- Also normal, appears identically in the harness: `modprobe: module 'tinyrv32ima_spi' not found`.
+
+**Rootfs command inventory** (saves a round of "command not found" — this build is minimal, and
+`df`, `head`, `md5sum`, `grep`, `vi` are all absent):
+```
+/bin      busybox cat dd dmesg echo false hush ls mkdir mount ping rm sh sync true umount uname
+/usr/bin  clear curl free getconf nano printf resize sysinfo uptime  (+ iio_* tools)
+/sbin     halt ifconfig init lsmod modprobe reboot route slattach
+```
+Root mounts **read-only**, so write tests must target `/dev` (devtmpfs). Deliberately avoid
+`mount -o remount,rw /` on hardware — item #2 documents ext2 corruption on abrupt power-off, and
+hardware has no clean shutdown path.
+
+**Serial gotchas worth knowing:** the Pico re-enumerates to a *different* `/dev/ttyACM*` number
+after reflash/reset (a stale `screen` holding the old node makes it look dead) — `screen
+/dev/ttyACM* 115200` sidesteps guessing. Only one reader can own the port: running a capture script
+and `screen` simultaneously makes both receive interleaved, corrupted text. `screen` eats **Ctrl+A**
+(its own escape — matters for nano, send it as `Ctrl+A A`), and **Ctrl+S** silently freezes output
+until `Ctrl+Q`, which is an easy false "it crashed".
 
 ### Side experiment: Pi 4B as a fake SD card (2026-08-26)
 
@@ -418,8 +511,13 @@ overclocked RP2040 running the same C interpreter would. Rate-limiting `start_vm
 instructions-per-flip loop against a target guest IPS would make the harness *feel* like real
 hardware speed-wise.
 
-Not done because: no real hardware benchmark exists yet to calibrate a target IPS against (hardware
-is parked), so any number picked now would be a guess, not data. It also wouldn't help find the
+**Unblocked 2026-08-27** — the missing calibration number now exists: real hardware mounted root at
+15.9 s against the harness's 0.34 s on the identical image, i.e. **~45× slower**. That's a wall-clock
+ratio on one boot, not a measured guest IPS, so it's a starting point for a throttle target rather
+than a precise figure. Still not built, but no longer blocked on data.
+
+Originally not done because: no real hardware benchmark existed to calibrate a target IPS against
+(hardware was parked), so any number picked would have been a guess, not data. It also wouldn't help find the
 class of bug hardware bring-up actually cares about — bad solder joints, SPI signal integrity,
 overvolt stability — those are physical, not timing artifacts, and no software throttle simulates
 them. Revisit once there's a real hardware IPS number to target; cheap to add then.
