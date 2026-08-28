@@ -1,5 +1,6 @@
 #include "pico/stdlib.h"
 #include "hardware/clocks.h"
+#include "hardware/spi.h"
 
 #include <stddef.h>
 #include <stdint.h>
@@ -89,9 +90,13 @@ void status_panel_init(void)
     put_str(buf, &n, " chip");
     ssd1306_row(1, buf, false);
 
+    // The *achieved* SPI rate, not PSRAM_SPI_SPEED_MHZ. The RP2040's SSP divides clk_peri
+    // by (even prescale x (1+postdiv)), so most requested rates round down -- asking for 30
+    // at a 400 MHz clk_peri actually gets you 28.6. A status panel that reports the number
+    // you asked for rather than the one you got is useless for tuning.
     n = 0;
     put_str(buf, &n, "PSRAM ");
-    put_num(buf, &n, PSRAM_SPI_SPEED_MHZ, 0, ' ');
+    put_num(buf, &n, spi_get_baudrate(PSRAM_SPI_INST) / 1000000u, 0, ' ');
     put_str(buf, &n, " MHz");
     ssd1306_row(2, buf, false);
 

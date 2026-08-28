@@ -111,14 +111,20 @@ const char spinner[] = "/-\\|";
 
 static volatile uint8_t vm_stage = VM_STAGE_INIT;
 
+// Cycles the emulator fabricated rather than executed. On WFI the step function runs
+// nothing and the loop below credits instrs_per_flip to the cycle CSR anyway, to keep
+// emulated time moving. Those have to come back out before the counter means
+// "instructions retired" -- otherwise an idle guest reports a steady, entirely fictional
+// instruction rate (4096 / ~2.8 ms loop period, which reads as a plausible ~1.5 MIPS).
+static volatile uint32_t vm_idle_lo = 0, vm_idle_hi = 0;
+
 uint8_t vm_get_stage(void) { return vm_stage; }
 
-// core.cyclel/cycleh is a 64-bit counter written by this core and read by the other one,
-// so a naive read can tear across the halves. Re-read the high word to detect that.
-uint64_t vm_get_instret(void)
+// Instructions actually retired: the cycle CSR minus the cycles fabricated for WFI.
+// Both are 64-bit values written by this core and read by the other one, so a naive read
+// can tear across the halves -- re-read the high word to detect that.
+static inline uint64_t read64_torn_safe(volatile uint32_t *lo, volatile uint32_t *hi)
 {
-    volatile uint32_t *lo = (volatile uint32_t *)&core.cyclel;
-    volatile uint32_t *hi = (volatile uint32_t *)&core.cycleh;
     uint32_t h, l;
     do
     {
@@ -126,6 +132,14 @@ uint64_t vm_get_instret(void)
         l = *lo;
     } while (h != *hi);
     return ((uint64_t)h << 32) | l;
+}
+
+uint64_t vm_get_instret(void)
+{
+    uint64_t cycles = read64_torn_safe((volatile uint32_t *)&core.cyclel,
+                                       (volatile uint32_t *)&core.cycleh);
+    uint64_t idle = read64_torn_safe(&vm_idle_lo, &vm_idle_hi);
+    return (cycles > idle) ? (cycles - idle) : 0;
 }
 
 uint8_t vm_get_powerstate(void)
@@ -336,6 +350,8 @@ int start_vm(int prev_power_state)
             if (do_sleep)
                 timing_delay_ms(1);
             *this_ccount += instrs_per_flip;
+            if ((vm_idle_lo += instrs_per_flip) < (uint32_t)instrs_per_flip)
+                vm_idle_hi++;
             break;
         case 3:
             instct = 0;
