@@ -66,10 +66,15 @@
 /* OLED status panel config (SSD1306 128x64, I2C)
 /******************/
 
-// Enable the SSD1306 status panel. Safe to leave on with nothing attached: the driver
-// probes at init and permanently disables itself if the display doesn't ACK, so the
-// firmware behaves identically either way. This is a stats panel, not a console.
-#define CONSOLE_OLED 1
+// Enable the SSD1306 status panel. The driver probes at init and permanently disables
+// itself if the display doesn't ACK, so this is safe with nothing attached.
+//
+// DEFAULTED OFF 2026-08-27 — not because of the driver, but because having the display
+// wired destabilises the PSRAM bus on the current breadboard: Linux panics with corrupted
+// kernel text (a decoded single-bit flip) at both 20 and 28.6 MHz with it connected, and
+// boots clean without it. See PLAN.md, "PSRAM bus is destabilised by the OLED wiring".
+// Set back to 1 once that is resolved.
+#define CONSOLE_OLED 0
 
 #if CONSOLE_OLED
 

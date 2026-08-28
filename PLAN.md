@@ -421,58 +421,78 @@ CLK   400 MHz
 torn 64-bit read since core 1 writes the counter while core 0 reads it. No new external symbols, so
 the desktop harness still builds and boots unchanged (verified).
 
-**MEASURED 2026-08-27, on hardware: `1.47 MIPS`** (two PSRAM chips, `PSRAM_SPI_SPEED_MHZ 20`,
-RP2040 at 400 MHz). First real instruction rate this project has had — everything before was a
-wall-clock stopwatch ratio.
+**⚠️ CORRECTION — the first "measured" 1.47 MIPS was an artifact. Do not cite it.**
 
-Two things fall out of it:
+`vm_get_instret()` originally read `core.cyclel/cycleh` raw. But on `WFI` the step function
+executes nothing and the loop credits `instrs_per_flip` (4096) to that counter anyway, to keep
+emulated time moving (`emulator.c`, `case 1:`). An idle Linux sits in `WFI`, so the panel was
+reporting 4096 / ~2.8 ms loop period ≈ **a completely fictional, very stable-looking 1.5 MIPS**.
+That is why the number looked so clean. Fixed in `32df541`: the fabricated cycles are tracked
+separately and subtracted, so an idle guest now correctly reads ~0.00 and a busy one reads real
+work.
 
-- **~272 RP2040 clocks per emulated instruction** (400e6 / 1.47e6). A tight interpreter on an M0+
-  should be well under 100; the excess is almost certainly PSRAM access through the software cache,
-  which suggests the emulator is **memory-bound, not interpreter-bound**. That makes
-  `PSRAM_SPI_SPEED_MHZ` the first knob worth trying — it is at 20 for breadboard safety, upstream
-  defaults to 50, and the panel now makes the experiment a flash-and-read.
-- **The harness-throttle idea has a target.** Kernel timestamps track real host time in this
-  emulator (`timing_micros()` drives guest time), so they are directly comparable: root mounts at
-  **15.9 s** on hardware vs **~0.33 s** in the harness — a ~48× ratio, consistent with the earlier
-  ~45× guess. That implies the harness runs at roughly **70 MIPS** (DERIVED, not measured — the
-  clean version is to surface `vm_get_instret()` in the harness too and read it directly).
+**Lesson worth keeping: an idle guest and a wedged guest both sit in `WFI`.** A plausible-looking
+steady MIPS reading was taken as proof the machine had booted, when it only proved the emulator's
+idle loop was turning.
 
-**Open: verify on the real panel.** Flash `pico-rv32ima-boards-v3`, wire the four jumpers, confirm
-the title bar and that `SPEED` settles to a plausible number once `STATE` reaches `running`. If the
-panel stays blank, the module is probably at I2C address **0x3D** rather than 0x3C — one line in
-`hw_config.h`.
+**Real measured rates, from watching the panel during boot** (a booting kernel is genuinely busy,
+so these are real): **0.5–1.5 MIPS at 28.6 MHz PSRAM.** The comparable figure at 20 MHz was never
+captured before the bus went unstable — see below. So **the memory-bound question is still open.**
 
-### Guest-driven status panel + image split — the agreed plan (2026-08-27)
+The harness-throttle target still stands on its own evidence: kernel timestamps track real host
+time (`timing_micros()` drives guest time), so root mounting at **15.9 s** on hardware vs **~0.33 s**
+in the harness gives a **~48×** ratio.
 
-Design settled in conversation with the user on 2026-08-27. **Nothing below is built yet** except
-where marked. Phase gates are real: you don't advance by writing more docs.
+### PSRAM bus is destabilised by the OLED wiring — open hardware bug (2026-08-27)
 
-#### The architecture, in one paragraph
+**Symptom:** with the SSD1306 wired, Linux panics shortly after init, at *both* 28.6 MHz and 20 MHz
+PSRAM. Without it, the same board boots to a shell and stays up.
 
-**Linux drives the display by writing bytes to a tty.** The guest has no display driver, no I2C, no
-framebuffer. It writes to `/dev/hvc1`, which the emulator turns into CSR `0x141` writes, which core
-0 renders onto whichever backend is configured. Core 1 runs the emulator; core 0 owns every
-physical display. That is why one guest-side path can feed both the I2C OLED and VGA — the guest
-was never coupled to either.
+**Attempt log:**
 
-**Verified 2026-08-27 in the harness:** `cat /proc/loadavg > /dev/hvc1` returns 0. `/dev/hvc0`
-through `/dev/hvc7` exist; `/proc/consoles` lists only `hvc0`, so **`hvc1` is a plain tty that will
-not catch kernel spam** — exactly right for a status channel. The guest half of this is already
-done and shipped in `net-v1`.
+| # | Config | Result |
+| --- | --- | --- |
+| 1 | 20 MHz, no display (earlier today) | Booted, shell, `dd` memtests, stable for minutes |
+| 2 | 20 MHz, display wired | `STATE running`, then panic |
+| 3 | 28.6 MHz, display wired | Booted to init, panic at 26 s |
+| 4 | 20 MHz, display wired, pre-panel-changes build | Boots, then panic — **rules out tonight's firmware edits** |
+| 5 | **Display unplugged + `CONSOLE_OLED 0` build** | **Boots to terminal, stable** |
 
-**Panel protocol** (a byte stream, same shape as the console):
+**The 28.6 MHz panic was decoded and is unambiguous memory corruption — a single bit flip.** The
+faulting word was `0x000a1027`, an `fsd` (floating-point store) on a CPU with no F/D extension.
+Flip bit 2 of the opcode (`0x27` → `0x23`) and it is `sh a0, 0(s4)` — an ordinary store, with `s4`
+holding a valid kernel pointer in the register dump. Kernel text got corrupted on a *re-read* from
+PSRAM after cache eviction, which is why it survived 26 seconds.
 
-| Byte | Meaning |
-| --- | --- |
-| `\f` | home + clear — begin a new frame |
-| `\n` | next row, wrapping at 21 columns |
-| other | a character |
+**Ruled out:** the firmware. Attempt 4 used a build that predates the WFI-accounting and
+`spi_get_baudrate` changes. Also verified `psram20.uf2` byte-matches a clean from-scratch build,
+and the harness boots fine with the emulator edit in place.
 
-So a full panel update from the shell is `printf '\f...' > /dev/hvc1`. No ioctl, no library.
+**Not yet isolated: physical disturbance vs. I2C switching noise.** Attempt 5 changed *two* things
+at once — the wires were removed **and** the firmware stopped driving I2C. The distinguishing test
+has not been run:
 
-**The keyboard is orthogonal and needs no thought.** PS/2 → core 0 `kb_queue` → CSR `0x140` → guest
-reads it as `hvc0` *input*. Opposite direction, different channel; it never meets the panel.
+> **Next session, run this first: plug the display back in physically, but flash the
+> `CONSOLE_OLED 0` build** (`firmware/out/bisect/A-no-panel.uf2`), so the wires are present and
+> the I2C bus stays idle.
+> - **Boots fine** → the wires are harmless; it is I2C *traffic* coupling into the SPI bus. Fix by
+>   rerouting the display leads away from GP10–14, adding a ground lead between them, and/or
+>   dropping `OLED_I2C_SPEED_KHZ` from 400 to 100.
+> - **Panics** → the act of wiring physically disturbed the PSRAM jumpers. Fix by reseating and
+>   shortening the PSRAM leads; the display is innocent.
+
+**`CONSOLE_OLED` default flipped to 0** until this is resolved — a default that panics the kernel is
+not a default. One line in `hw_config.h` to turn back on.
+
+**Fallback builds ready** in `firmware/out/`: `psram-ladder/psram{12,16,20,30}.uf2` (actual rates
+11.8 / 15.4 / 20 / 28.6 MHz), `bisect/A-no-panel.uf2`, `bisect/B-no-wfi-fix.uf2`, and
+`v2-classic/` (the pre-panel hardware-verified release).
+
+**Underlying cause is almost certainly the breadboard.** Two PSRAM chips share SCLK/SI/SO on flying
+leads, which roughly doubles the capacitive load versus the single-chip grading done at bring-up.
+That bus was already at the edge — adding anything nearby pushes it over. The durable fix is
+getting the PSRAM off the breadboard onto soldered protoboard, with 100 nF at each chip's VDD, a
+10 µF bulk cap, and ~22–33 Ω series resistors on SCLK.
 
 #### ~~Phase 0 — verify the OLED~~ — **DONE 2026-08-27, first try**
 
