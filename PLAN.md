@@ -1152,32 +1152,24 @@ core-0 HAL relay, guest kernel driver + DT node — not a one-file patch. Payoff
 `gpio_chip`, standard Linux tooling (`/sys/class/gpio`, `libgpiod`, or direct syscalls from Lua/
 Forth/C) just works against it, no custom protocol for userspace to speak.
 
-**Pin budget is the real constraint, and it's tight.** Current allocation: UART 0/1 (disabled),
-SD SPI 0/2/3/4, guest-facing bit-banged SPI 5/6/7/8, PSRAM SPI 10-14, VGA 16-20 (not yet wired),
-PS/2 26/27 (not yet wired), OLED I2C 21/28 (staying enabled per this session's decision). Once
-VGA+PS/2 are both wired in alongside the OLED, **free GPIOs drop to exactly four: 1, 9, 15, 22.**
-That's a real header, not nothing, but it rules out anything with a real pin count (a keypad
-matrix, multiple sensors, an LED strip's data+clock+extras).
+**Pin budget, and why it's not actually the constraint it first looks like.** Current allocation:
+UART 0/1 (disabled), SD SPI 0/2/3/4, guest-facing bit-banged SPI 5/6/7/8, PSRAM SPI 10-14, VGA
+16-20 (not yet wired), PS/2 26/27 (not yet wired), OLED I2C 21/28. Free GPIOs: 1, 9, 15, 22 — plus
+21/28 too, *whenever OLED isn't the active console*, per the existing scope fence (console and
+status panel don't coexist — see "Display plans" above). VGA-as-console and OLED-as-status-panel
+are alternate configs, not simultaneous, so the actual number of free pins depends on which
+console is active at the time, not a fixed "4 forever."
 
-**Best answer for running out of native pins: an I2C GPIO expander riding the OLED's existing
-bus, not fighting over the last four native GPIOs.** I2C0 (SDA 28 / SCL 21) is already wired and
-already has spare address space — the OLED sits at `0x3C`, and a cheap expander (PCF8574,
-MCP23017) at a different address adds 8-16 more pins for the cost of one more I2C device, zero
-additional native GPIOs. It's also less kernel work than the native path, not more: PCF8574/
-MCP23017 already have upstream Linux `gpio_chip` drivers (`drivers/gpio/gpio-pcf857x.c`,
-`gpio-mcp23s08.c`) that bind via a device tree node naming the I2C address — no custom driver code
-at all, *if* the guest can already issue general I2C transactions. Today it can't — I2C0 is
-core-0-only, hardwired to the OLED renderer, not guest-visible. Making it guest-visible is the
-same shape of work as the bit-banged SPI CSR already proven (`0x180`-`0x183`): a CSR or MMIO
-proxy that lets the guest issue arbitrary I2C reads/writes, with core 0 executing them on the real
-peripheral. That's the piece worth building first if GPIO scale (not just a blink demo) is the
-actual goal — it turns "4 native pins" into "16+ expander pins with a stock kernel driver on top."
+Four is enough for what this is actually for (user call, 2026-08-29) — a blink demo, a button, a
+sensor or two — not a keypad matrix or an LED strip. **Scaling GPIO via an I2C expander on the
+OLED bus was considered and rejected**: it solves for pin *scale*, which isn't the actual goal
+here, and it's not even free the way it first looked — it assumes OLED's I2C bus is up at the same
+time GPIO is wanted, which the console/status-panel scope fence doesn't guarantee. Don't revisit
+this unless a future need genuinely wants more than a handful of pins.
 
-**Recommended order, if/when this gets built:** native MMIO GPIO on the 4 free pins first (proves
-the MMIO-trap mechanism end to end with the smallest possible driver), then the general I2C
-passthrough CSR (reusable for the expander *and* for driving any other I2C device the guest might
-ever want), then bind a stock expander driver on top for real pin count. Not started; this is a
-scoping note, not a commitment to build it now.
+**What's actually worth building, if/when this gets picked up:** just the native MMIO GPIO trap on
+whichever pins are free at the time — smallest possible driver, no I2C passthrough, no expander.
+Not started; this is a scoping note, not a commitment to build it now.
 
 ### `curl` and `sysinfo` — real userspace tools added (2026-08-17)
 
