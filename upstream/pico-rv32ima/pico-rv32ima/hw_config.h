@@ -69,12 +69,12 @@
 // Enable the SSD1306 status panel. The driver probes at init and permanently disables
 // itself if the display doesn't ACK, so this is safe with nothing attached.
 //
-// DEFAULTED OFF 2026-08-27 — not because of the driver, but because having the display
-// wired destabilises the PSRAM bus on the current breadboard: Linux panics with corrupted
-// kernel text (a decoded single-bit flip) at both 20 and 28.6 MHz with it connected, and
-// boots clean without it. See PLAN.md, "PSRAM bus is destabilised by the OLED wiring".
-// Set back to 1 once that is resolved.
-#define CONSOLE_OLED 0
+// Was defaulted off 2026-08-27 — having the display wired destabilised the PSRAM bus via a
+// shared 3V3 supply node (pin 36 fed PSRAM VCC + pull-ups + SD + OLED all at once). Fixed
+// 2026-08-29 by moving SD/OLED to a separate supply with a single-point ground tie and
+// decoupling PSRAM's own VCC/GND locally — see PLAN.md, "PSRAM bus is destabilised by the
+// OLED wiring — RESOLVED 2026-08-29". Re-enabled now that the fix is verified on hardware.
+#define CONSOLE_OLED 1
 
 #if CONSOLE_OLED
 

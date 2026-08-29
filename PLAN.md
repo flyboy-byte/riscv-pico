@@ -443,6 +443,43 @@ The harness-throttle target still stands on its own evidence: kernel timestamps 
 time (`timing_micros()` drives guest time), so root mounting at **15.9 s** on hardware vs **~0.33 s**
 in the harness gives a **~48×** ratio.
 
+### PSRAM bus is destabilised by the OLED wiring — RESOLVED 2026-08-29
+
+**Root cause confirmed: single-point 3V3 supply, not the wires themselves.** Physical pin 36
+(3V3 OUT) was feeding *everything* — SD VCC, both PSRAM chips' VCC, and the WP/HOLD pull-ups
+(pins 3/7) on both chips. Any switching load on that node (I2C traffic, SD SPI activity) rippled
+the actual operating voltage of the chip that was corrupting reads, not just its ground reference
+— a more direct mechanism than plain ground bounce, and it explains why GP28/21 (physically far
+from GP10-14) could still take the bus down.
+
+**Fix, tested on the real breadboard, boots clean with the OLED wired and running at 20 MHz:**
+- SD and OLED VCC moved to a separate breadboard PSU module; ground tied to the Pico at exactly
+  one junction (not a loop).
+- PSRAM chips' VCC stayed on the Pico's own 3V3, undisturbed by the other two devices.
+- WP/HOLD pull-ups (10 kΩ) reference PSRAM's own VCC, not the external supply — pulling them to a
+  separately-regulated rail risks a pin sitting above its own chip's VCC.
+- PSRAM chips given a dedicated Pico GND pin, separate from the SD/OLED ground path.
+- 100 nF ceramic decoupling caps soldered with short leads directly at each PSRAM chip's VCC/GND
+  pins (hand-soldered onto "104"-marked caps for breadboard mounting).
+- Short jumpers prioritized on PSRAM (10-14) and the OLED I2C pair (21/28) specifically, since
+  those carry the switching traffic.
+
+Booted with `STATE running`, OLED live, no panic — same 20 MHz config that reliably panicked
+before. **`CONSOLE_OLED` default flipped back to 1** (was 0 since 2026-08-27).
+
+Full wiring/schematic writeup, including the pin-36 fan-out and the reasoning behind each part of
+the fix, lives in [`docs/HARDWARE_SCHEMATIC.md`](docs/HARDWARE_SCHEMATIC.md) — written as a
+handoff doc for a proper protoboard layout pass, still worth doing even though the immediate panic
+is fixed (breadboard flying leads on the PSRAM bus remain the least trustworthy part of this rig).
+
+**What's still unverified:** whether VGA (continuous, high-frequency PIO switching, much more
+sustained than I2C's twice-a-second flush) reproduces a similar problem when it's wired in. Same
+diagnostic playbook applies — isolate incrementally (VSYNC/HSYNC first, then pixel data), watch
+for a panic, don't assume "it's not I2C so it's fine."
+
+<details>
+<summary>Original incident writeup (2026-08-27), kept for the record</summary>
+
 ### PSRAM bus is destabilised by the OLED wiring — open hardware bug (2026-08-27)
 
 **Symptom:** with the SSD1306 wired, Linux panics shortly after init, at *both* 28.6 MHz and 20 MHz
@@ -502,6 +539,8 @@ Measured display draw **12.2 mA** — 4% of the ~300 mA recommended external bud
 against ~70-150 mA total for PSRAM + SD + display. Power is a non-issue.
 
 Phases 2, 3 and 5 are unblocked.
+
+</details>
 
 #### Phase 1 — the `plain` guest image (no hardware needed)
 
@@ -1070,6 +1109,75 @@ verify with `ps`, not `pgrep -f` — see the process-hygiene note above).
   script, just gets copied to `usr/bin/sysinfo` via buildroot's overlay mechanism, not `apps/`'s
   usual debugfs-inject path). Written for busybox `hush`, not bash — see the `curl`/`sysinfo`
   section below for why bash itself is a hard no on this target.
+- **`lua`** (2026-08-29) — real Lua 5.4.7, built from the unmodified upstream source tarball
+  (not vendored into `apps/` — it's a whole third-party project, unlike the small hand-written
+  files above) with the same toolchain and flags as `basic`/`nano`, plus `-DLUA_32BITS=1`: this
+  core has no F/D extension at all (`RV32IMA` — the name says it), so any floating point already
+  goes through slow soft-float via `-mabi=ilp32`; `LUA_32BITS` switches `lua_Number` to 4-byte
+  float and `lua_Integer` to 32-bit int instead of Lua's default 8-byte double/`long long`, which
+  is both faster and smaller on a target with no hardware float and 16 MB total RAM. All 32 core
+  `.c` files plus `lua.c` compiled and linked into one 397 KB bFLT binary — no buildroot package
+  rebuild needed, same "cross-compile the real upstream source directly" pattern as `nano`.
+  **Known caveat, not yet tested:** `os.execute`/`io.popen` go through the C library's `system()`/
+  `popen()`, which `fork()` internally — expect these to fail with the same NOMMU `-EINVAL` this
+  project has already hit elsewhere. The interpreter itself doesn't need `fork()` and should be
+  unaffected; only shelling out from inside a script is suspect. Published to the `apps-v1`
+  release alongside `hello`/`basic`/`nano`. Injected directly into the real hardware SD card's
+  `ROOTFS` (not just the harness) via the same `debugfs -w` recipe below — first app added
+  straight to hardware rather than proven in the harness first.
+
+### GPIO access for the guest — scoped, not started (2026-08-29)
+
+**Not implemented.** No custom CSR or MMIO trap exists for GPIO today — the only guest-facing
+hardware is console I/O (`0x139`/`0x140`), a second HVC channel (`0x141`/`0x142`), the SD block
+device (`0x150`-`0x155`), hibernate (`0x170`), and the bit-banged SPI exposed via `0x180`-`0x183`.
+That last one lives in `pico-rv32ima/hal/hal_csr.h` (app-layer HAL, not the vendored
+`tiny-rv32ima` subtree) — the right place to add a new device, minimizing subtree edits.
+
+**MMIO, not CSR, is the right mechanism for this one.** The bit-banged SPI and HVC channels use
+real RV32 CSR instructions (`csrrw`/`csrrs`), which is a natural fit for narrow, low-level
+side-channels but awkward for a *kernel driver* — a driver would need inline assembly rather than
+the `readl`/`writel` idiom every real Linux GPIO driver uses. The console UART emulation already
+does this the other way: it's a fake 8250/16550 at MMIO address `0x10000000`, trapped by the
+emulator's load/store handler, not a CSR. A GPIO device should follow that pattern — a small
+memory-mapped register block (e.g. `GPIO_DIR`/`GPIO_OUT`/`GPIO_IN`, one bit per available pin) at
+a free MMIO address, trapped the same way, forwarded to core 0 which calls the real `gpio_put`/
+`gpio_get` on actual RP2040 pins.
+
+**As a kernel module specifically:** a `gpio_chip` platform driver (`drivers/gpio/gpio-tinyrv32.c`
+or similar) implementing `get`/`set`/`direction_input`/`direction_output` against that MMIO block,
+bound via a device tree node (new node in the DTB + matching `compatible` string in the driver's
+`of_device_id` table). This is real, scoped kernel work across three layers — emulator MMIO trap,
+core-0 HAL relay, guest kernel driver + DT node — not a one-file patch. Payoff: once it's a real
+`gpio_chip`, standard Linux tooling (`/sys/class/gpio`, `libgpiod`, or direct syscalls from Lua/
+Forth/C) just works against it, no custom protocol for userspace to speak.
+
+**Pin budget is the real constraint, and it's tight.** Current allocation: UART 0/1 (disabled),
+SD SPI 0/2/3/4, guest-facing bit-banged SPI 5/6/7/8, PSRAM SPI 10-14, VGA 16-20 (not yet wired),
+PS/2 26/27 (not yet wired), OLED I2C 21/28 (staying enabled per this session's decision). Once
+VGA+PS/2 are both wired in alongside the OLED, **free GPIOs drop to exactly four: 1, 9, 15, 22.**
+That's a real header, not nothing, but it rules out anything with a real pin count (a keypad
+matrix, multiple sensors, an LED strip's data+clock+extras).
+
+**Best answer for running out of native pins: an I2C GPIO expander riding the OLED's existing
+bus, not fighting over the last four native GPIOs.** I2C0 (SDA 28 / SCL 21) is already wired and
+already has spare address space — the OLED sits at `0x3C`, and a cheap expander (PCF8574,
+MCP23017) at a different address adds 8-16 more pins for the cost of one more I2C device, zero
+additional native GPIOs. It's also less kernel work than the native path, not more: PCF8574/
+MCP23017 already have upstream Linux `gpio_chip` drivers (`drivers/gpio/gpio-pcf857x.c`,
+`gpio-mcp23s08.c`) that bind via a device tree node naming the I2C address — no custom driver code
+at all, *if* the guest can already issue general I2C transactions. Today it can't — I2C0 is
+core-0-only, hardwired to the OLED renderer, not guest-visible. Making it guest-visible is the
+same shape of work as the bit-banged SPI CSR already proven (`0x180`-`0x183`): a CSR or MMIO
+proxy that lets the guest issue arbitrary I2C reads/writes, with core 0 executing them on the real
+peripheral. That's the piece worth building first if GPIO scale (not just a blink demo) is the
+actual goal — it turns "4 native pins" into "16+ expander pins with a stock kernel driver on top."
+
+**Recommended order, if/when this gets built:** native MMIO GPIO on the 4 free pins first (proves
+the MMIO-trap mechanism end to end with the smallest possible driver), then the general I2C
+passthrough CSR (reusable for the expander *and* for driving any other I2C device the guest might
+ever want), then bind a stock expander driver on top for real pin count. Not started; this is a
+scoping note, not a commitment to build it now.
 
 ### `curl` and `sysinfo` — real userspace tools added (2026-08-17)
 
