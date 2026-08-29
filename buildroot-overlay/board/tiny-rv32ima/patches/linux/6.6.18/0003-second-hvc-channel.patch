@@ -1,0 +1,129 @@
+From: riscv-pico
+Subject: [PATCH] second HVC channel for SLIP (CSRs 0x141/0x142, /dev/hvc1)
+
+A second port on the mainline hvc multi-port framework, alongside the existing
+console channel from 0001. Uses a separate CSR pair so it never interferes with
+the boot console, and is not console_instantiate()'d - it's a plain data pipe
+for SLIP framing, not a candidate console. Desktop-harness side of this pair
+lives in harness/hal_csr.h + harness/netchan.c (CSR 0x141/0x142 -> a host PTY).
+
+Includes a periodic kernel timer that kicks khvcd (the hvc polling kthread) -
+without it, hvc_minirv32_tty_get2() is never invoked at all, since data on
+this channel arrives from outside the kernel (the host side of the PTY) with
+nothing inside the kernel to trigger a poll. See the comment above the timer
+for a known, NOT YET FIXED issue: once something has /dev/hvc1 open for read,
+the primary console (hvc0) goes completely unresponsive. Confirmed the timer
+does make get_chars2() get called (previously zero calls, ever) - the console
+freeze is a separate, later-discovered bug, not yet root-caused.
+---
+ drivers/tty/hvc/hvc_riscv_minirv32.c | 84 +++++++++++++++++++++++++++++++++
+ 1 file changed, 84 insertions(+)
+
+--- a/drivers/tty/hvc/hvc_riscv_minirv32.c
++++ b/drivers/tty/hvc/hvc_riscv_minirv32.c
+@@ -10,6 +10,7 @@
+ #include <linux/err.h>
+ #include <linux/init.h>
+ #include <linux/moduleparam.h>
++#include <linux/timer.h>
+ #include <linux/types.h>
+ 
+ #include "hvc_console.h"
+@@ -51,12 +52,95 @@
+ 	.put_chars = hvc_minirv32_tty_put,
+ };
+ 
++/*
++ * Second channel (/dev/hvc1), CSRs 0x141/0x142 - a plain data pipe for SLIP, not a
++ * console: no hvc_instantiate() call, so it's never a candidate for the boot console
++ * and nothing gets auto-attached to it.
++ */
++static void minirv32_putchar2( char s )
++{
++        asm volatile( "csrrw x0, 0x141, %0\n" : : "r" (s));
++}
++
++static int minirv32_getchar2( void )
++{
++        int c = 0;
++        asm volatile ("csrr %0,0x142"   : "=r" (c)  );
++        return c;
++}
++
++static int hvc_minirv32_tty_put2(uint32_t vtermno, const char *buf, int count)
++{
++	int i;
++	for (i = 0; i < count; i++)
++		minirv32_putchar2(buf[i]);
++	return i;
++}
++
++static int hvc_minirv32_tty_get2(uint32_t vtermno, char *buf, int count)
++{
++	int i, c;
++	for (i = 0; i < count; i++) {
++		c = minirv32_getchar2();
++		if (c < 0)
++			break;
++		buf[i] = c;
++	}
++	return i;
++}
++
++static const struct hv_ops hvc_minirv32_ops2 = {
++	.get_chars = hvc_minirv32_tty_get2,
++	.put_chars = hvc_minirv32_tty_put2,
++};
++
+ static int __init hvc_minirv32_init(void)
+ {
+ 	return PTR_ERR_OR_ZERO(hvc_alloc(0, 0, &hvc_minirv32_ops, 16));
+ }
+ device_initcall(hvc_minirv32_init);
+ 
++/*
++ * khvcd (the hvc framework's polling kthread) blocks indefinitely once idle and only
++ * wakes up via hvc_kick(). The console port stays "kicked" naturally by its own
++ * printk/typing activity, but this second channel's data arrives from outside the
++ * kernel entirely (the host side of the CSR 0x141/0x142 pair) - nothing inside the
++ * kernel would ever call hvc_kick() to notice it. Without this timer, writes from
++ * this driver work fine (they don't depend on polling), but anything the host writes
++ * is invisible until something unrelated happens to kick khvcd. 50ms is an accepted
++ * SLIP-latency tradeoff, not a hard requirement.
++ *
++ * Confirmed via pr_info instrumentation (2026-08-17): this timer does make
++ * hvc_minirv32_tty_get2() actually get called once something has /dev/hvc1 open (it
++ * was never called at all before this timer existed). BUT: with an active reader on
++ * hvc1 (e.g. `cat /dev/hvc1 &`), the primary console (hvc0) goes completely
++ * unresponsive - not slow, fully silent, no further input processed. Not yet
++ * root-caused. Suspect the polled port's unconditional `poll_mask |= HVC_POLL_READ`
++ * in __hvc_poll() (drivers/tty/hvc/hvc_console.c) combined with this 50ms timer
++ * creates a livelock/starvation situation for khvcd against the console port, but
++ * that's a hypothesis, not confirmed - needs stepping through with the second port
++ * NOT opened (only allocated) to isolate whether allocation alone is enough to
++ * trigger the freeze, vs. needing an active reader.
++ */
++static struct timer_list minirv32_hvc2_kick_timer;
++
++static void minirv32_hvc2_kick(struct timer_list *t)
++{
++	hvc_kick();
++	mod_timer(&minirv32_hvc2_kick_timer, jiffies + msecs_to_jiffies(50));
++}
++
++static int __init hvc_minirv32_init2(void)
++{
++	int ret = PTR_ERR_OR_ZERO(hvc_alloc(1, 0, &hvc_minirv32_ops2, 16));
++	if (ret)
++		return ret;
++	timer_setup(&minirv32_hvc2_kick_timer, minirv32_hvc2_kick, 0);
++	mod_timer(&minirv32_hvc2_kick_timer, jiffies + msecs_to_jiffies(50));
++	return 0;
++}
++device_initcall(hvc_minirv32_init2);
++
+ static int __init hvc_minirv32_console_init(void)
+ {
+ 	hvc_instantiate(0, 0, &hvc_minirv32_ops);
+-- 
+2.37.2

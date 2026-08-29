@@ -1,0 +1,244 @@
+diff --git a/drivers/block/Kconfig b/drivers/block/Kconfig
+index 5b9d4aaebb81..578c93ce1919 100644
+--- a/drivers/block/Kconfig
++++ b/drivers/block/Kconfig
+@@ -219,6 +219,11 @@ config BLK_DEV_NBD
+ 
+ 	  If unsure, say N.
+ 
++config BLK_DEV_TINYRV32IMA
++	tristate "tiny-rv32ima block device support"
++	help
++	  Block device driver for tiny-rv32ima
++
+ config BLK_DEV_RAM
+ 	tristate "RAM block device support"
+ 	help
+diff --git a/drivers/block/Makefile b/drivers/block/Makefile
+index 101612cba303..82261c1f5bb7 100644
+--- a/drivers/block/Makefile
++++ b/drivers/block/Makefile
+@@ -26,6 +26,8 @@ obj-$(CONFIG_SUNVDC)		+= sunvdc.o
+ obj-$(CONFIG_BLK_DEV_NBD)	+= nbd.o
+ obj-$(CONFIG_VIRTIO_BLK)	+= virtio_blk.o
+ 
++obj-$(CONFIG_BLK_DEV_TINYRV32IMA)	+= tinyrv32blk.o
++
+ obj-$(CONFIG_XEN_BLKDEV_FRONTEND)	+= xen-blkfront.o
+ obj-$(CONFIG_XEN_BLKDEV_BACKEND)	+= xen-blkback/
+ obj-$(CONFIG_BLK_DEV_DRBD)     += drbd/
+diff --git a/drivers/block/tinyrv32blk.c b/drivers/block/tinyrv32blk.c
+new file mode 100644
+index 000000000000..bb32e6b0d7ca
+--- /dev/null
++++ b/drivers/block/tinyrv32blk.c
+@@ -0,0 +1,208 @@
++// Block device driver for tiny-rv32ima
++// 2024, Vlad Tomoiaga
++// based around https://github.com/Panky-codes/blkram
++
++#include "asm/page.h"
++#include "linux/blk_types.h"
++#include "linux/sysfb.h"
++#include <linux/module.h>
++#include <linux/blkdev.h>
++#include <linux/blk-mq.h>
++#include <linux/idr.h>
++
++unsigned long max_segments = 32;
++unsigned long max_segment_size = 65536;
++unsigned long lbs = 512;
++unsigned long pbs = 512;
++
++struct tinyrv32_blk_dev_t {
++	sector_t capacity;
++	struct blk_mq_tag_set tag_set;
++	struct gendisk *disk;
++};
++
++static int32_t tinyrv32_get_blk_size(void)
++{
++	int32_t sz;
++	asm volatile("csrr %0,0x150" : "=r"(sz));
++	return sz;
++}
++
++static void tinyrv32_prepare_transfer(void *memptr, unsigned long off,
++				      unsigned long sz)
++{
++	asm volatile("csrrw x0, 0x151, %0\n" : : "r"(memptr));
++	asm volatile("csrrw x0, 0x152, %0\n" : : "r"(off));
++	asm volatile("csrrw x0, 0x153, %0\n" : : "r"(sz));
++}
++
++static int32_t tinyrv32_get_status(void)
++{
++	int32_t stat;
++	asm volatile("csrr %0,0x155" : "=r"(stat));
++	return stat;
++}
++
++static int major;
++static DEFINE_IDA(tinyrv32_blk_indexes);
++static struct tinyrv32_blk_dev_t *tinyrv32_blk_dev = NULL;
++
++static blk_status_t tinyrv32_blk_queue_rq(struct blk_mq_hw_ctx *hctx,
++					  const struct blk_mq_queue_data *bd)
++{
++	struct request *rq = bd->rq;
++	blk_status_t err = BLK_STS_OK;
++	struct bio_vec bv;
++	struct req_iterator iter;
++	loff_t pos = blk_rq_pos(rq) << SECTOR_SHIFT;
++	struct tinyrv32_blk_dev_t *tinyrv32blk = hctx->queue->queuedata;
++	loff_t data_len = (tinyrv32blk->capacity << SECTOR_SHIFT);
++
++	blk_mq_start_request(rq);
++
++	rq_for_each_segment(bv, rq, iter) {
++		unsigned int len = bv.bv_len;
++		void *buf = page_address(bv.bv_page) + bv.bv_offset;
++
++		if (pos + len > data_len) {
++			err = BLK_STS_IOERR;
++			break;
++		}
++		tinyrv32_prepare_transfer(buf, pos, len);
++		switch (req_op(rq)) {
++		case REQ_OP_READ:
++			asm volatile("csrrw x0, 0x154, %0\n" : : "r"(0));
++			break;
++		case REQ_OP_WRITE:
++			asm volatile("csrrw x0, 0x154, %0\n" : : "r"(1));
++			break;
++		default:
++			err = BLK_STS_IOERR;
++			goto end_request;
++		}
++		if (tinyrv32_get_status()) {
++			err = BLK_STS_IOERR;
++			goto end_request;
++		}
++		pos += len;
++	}
++
++end_request:
++	blk_mq_end_request(rq, err);
++	return BLK_STS_OK;
++}
++
++static const struct blk_mq_ops tinyrv32_blk_mq_ops = {
++	.queue_rq = tinyrv32_blk_queue_rq,
++};
++
++static const struct block_device_operations tinyrv32_blk_rq_ops = {
++	.owner = THIS_MODULE,
++};
++
++static int __init tinyrv32_blk_init(void)
++{
++	int ret = 0;
++	int minor;
++	struct gendisk *disk;
++	loff_t data_size_bytes = tinyrv32_get_blk_size();
++
++	if (data_size_bytes == 0) {
++		ret = -ENOMEM;
++		goto unregister_blkdev;
++	}
++
++	pr_info("tiny-rv32ima block device has %d megabytes.", tinyrv32_get_blk_size() >> 20);
++
++	ret = register_blkdev(0, "tinyrv32blk");
++	if (ret < 0)
++		return ret;
++
++	major = ret;
++	tinyrv32_blk_dev =
++		kzalloc(sizeof(struct tinyrv32_blk_dev_t), GFP_KERNEL);
++
++	if (tinyrv32_blk_dev == NULL) {
++		pr_err("memory allocation failed for tinyrv32_blk_dev\n");
++		ret = -ENOMEM;
++		goto unregister_blkdev;
++	}
++
++	tinyrv32_blk_dev->capacity = data_size_bytes >> SECTOR_SHIFT;
++
++	memset(&tinyrv32_blk_dev->tag_set, 0,
++	       sizeof(tinyrv32_blk_dev->tag_set));
++	tinyrv32_blk_dev->tag_set.ops = &tinyrv32_blk_mq_ops;
++	tinyrv32_blk_dev->tag_set.queue_depth = 128;
++	tinyrv32_blk_dev->tag_set.numa_node = NUMA_NO_NODE;
++	tinyrv32_blk_dev->tag_set.flags = BLK_MQ_F_SHOULD_MERGE;
++	tinyrv32_blk_dev->tag_set.cmd_size = 0;
++	tinyrv32_blk_dev->tag_set.driver_data = tinyrv32_blk_dev;
++	tinyrv32_blk_dev->tag_set.nr_hw_queues = 1;
++
++	ret = blk_mq_alloc_tag_set(&tinyrv32_blk_dev->tag_set);
++	if (ret)
++		goto data_err;
++
++	disk = tinyrv32_blk_dev->disk =
++		blk_mq_alloc_disk(&tinyrv32_blk_dev->tag_set, tinyrv32_blk_dev);
++
++	blk_queue_logical_block_size(disk->queue, lbs);
++	blk_queue_physical_block_size(disk->queue, pbs);
++	blk_queue_max_segments(disk->queue, max_segments);
++	blk_queue_max_segment_size(disk->queue, max_segment_size);
++
++	if (IS_ERR(disk)) {
++		ret = PTR_ERR(disk);
++		pr_err("Error allocating a disk\n");
++		goto data_err;
++	}
++
++	// This is not necessary as we don't support partitions, and creating
++	// more RAM backed devices with the existing module
++	minor = ret = ida_alloc(&tinyrv32_blk_indexes, GFP_KERNEL);
++	if (ret < 0)
++		goto cleanup_disk;
++
++	disk->major = major;
++	disk->first_minor = minor;
++	disk->minors = 1;
++	snprintf(disk->disk_name, DISK_NAME_LEN, "tinyrv32blk");
++	disk->fops = &tinyrv32_blk_rq_ops;
++	disk->flags = GENHD_FL_NO_PART;
++	set_capacity(disk, tinyrv32_blk_dev->capacity);
++
++	ret = add_disk(disk);
++	if (ret < 0)
++		goto cleanup_disk;
++
++	pr_info("tiny-rv32ima block device driver loaded.\n");
++	return 0;
++
++cleanup_disk:
++	put_disk(tinyrv32_blk_dev->disk);
++data_err:
++	kfree(tinyrv32_blk_dev);
++unregister_blkdev:
++	unregister_blkdev(major, "tinyrv32blk");
++
++	return ret;
++}
++
++static void __exit tinyrv32_blk_exit(void)
++{
++	if (tinyrv32_blk_dev->disk) {
++		del_gendisk(tinyrv32_blk_dev->disk);
++		put_disk(tinyrv32_blk_dev->disk);
++	}
++	unregister_blkdev(major, "tinyrv32blk");
++	kfree(tinyrv32_blk_dev);
++
++	pr_info("module unloaded\n");
++}
++
++module_init(tinyrv32_blk_init);
++module_exit(tinyrv32_blk_exit);
++
++MODULE_AUTHOR("tvlad1234");
++MODULE_LICENSE("GPL");
+\ No newline at end of file

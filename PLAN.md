@@ -1126,31 +1126,58 @@ verify with `ps`, not `pgrep -f` — see the process-hygiene note above).
   `ROOTFS` (not just the harness) via the same `debugfs -w` recipe below — first app added
   straight to hardware rather than proven in the harness first.
 
-### GPIO access for the guest — scoped, not started (2026-08-29)
+### GPIO access for the guest — BUILT AND VERIFIED (2026-08-29)
 
-**Not implemented.** No custom CSR or MMIO trap exists for GPIO today — the only guest-facing
-hardware is console I/O (`0x139`/`0x140`), a second HVC channel (`0x141`/`0x142`), the SD block
-device (`0x150`-`0x155`), hibernate (`0x170`), and the bit-banged SPI exposed via `0x180`-`0x183`.
-That last one lives in `pico-rv32ima/hal/hal_csr.h` (app-layer HAL, not the vendored
-`tiny-rv32ima` subtree) — the right place to add a new device, minimizing subtree edits.
+**Working, end to end, verified in the harness and pushed to real hardware.** Four host pins
+(1, 9, 15, 22) exposed to the guest as a real `gpio_chip` — `/dev/gpiochip0`, `label:
+tinyrv32gpio`, `lines: 4`. Standard chardev ioctls work against it (`GPIO_V2_GET_LINE_IOCTL`,
+`GPIO_V2_LINE_SET_VALUES_IOCTL`, `GPIO_V2_LINE_GET_VALUES_IOCTL`) — no custom protocol for
+userspace, `apps/gpiotest.c` proves it with the real uAPI.
 
-**MMIO, not CSR, is the right mechanism for this one.** The bit-banged SPI and HVC channels use
-real RV32 CSR instructions (`csrrw`/`csrrs`), which is a natural fit for narrow, low-level
-side-channels but awkward for a *kernel driver* — a driver would need inline assembly rather than
-the `readl`/`writel` idiom every real Linux GPIO driver uses. The console UART emulation already
-does this the other way: it's a fake 8250/16550 at MMIO address `0x10000000`, trapped by the
-emulator's load/store handler, not a CSR. A GPIO device should follow that pattern — a small
-memory-mapped register block (e.g. `GPIO_DIR`/`GPIO_OUT`/`GPIO_IN`, one bit per available pin) at
-a free MMIO address, trapped the same way, forwarded to core 0 which calls the real `gpio_put`/
-`gpio_get` on actual RP2040 pins.
+**Correction to the original scoping note below: CSR, not MMIO, turned out to be the right call.**
+Before writing any code, checked the closest real analog — `tinyrv32blk.c`, the existing block
+device driver — and found every custom device in this tree, without exception, is plain CSR
+instructions (`csrrw`/`csrr`) in a statically-registered driver, no device tree, no MMIO trap.
+That's the established convention here, confirmed by reading the actual source rather than
+assuming "real Linux driver" best practice transfers unmodified. Went with CSR to match it.
 
-**As a kernel module specifically:** a `gpio_chip` platform driver (`drivers/gpio/gpio-tinyrv32.c`
-or similar) implementing `get`/`set`/`direction_input`/`direction_output` against that MMIO block,
-bound via a device tree node (new node in the DTB + matching `compatible` string in the driver's
-`of_device_id` table). This is real, scoped kernel work across three layers — emulator MMIO trap,
-core-0 HAL relay, guest kernel driver + DT node — not a one-file patch. Payoff: once it's a real
-`gpio_chip`, standard Linux tooling (`/sys/class/gpio`, `libgpiod`, or direct syscalls from Lua/
-Forth/C) just works against it, no custom protocol for userspace to speak.
+**The three layers, as built:**
+- **Protocol** — CSRs `0x1a0`-`0x1a3`: `0x1a0` selects which of the 4 pins subsequent ops apply
+  to, `0x1a1` sets direction (0=in/1=out), `0x1a2` sets output level, `0x1a3` reads the level
+  (read-only, works regardless of direction) — same select-then-act shape as the existing
+  bit-banged SPI CSRs.
+- **Firmware HAL** — `pico-rv32ima/hal/hal_csr.h` (real hardware, lazy `gpio_init()` per pin on
+  first select) and `harness/hal_csr.h` (desktop: a loopback simulation logged to stderr, enough
+  to smoke-test the driver's CSR sequencing without real hardware to toggle).
+- **Kernel driver** — `drivers/gpio/gpio-tinyrv32.c`, a new patch
+  (`buildroot-overlay/board/tiny-rv32ima/patches/linux/6.6.18/0004-gpio-driver.patch`) against the
+  same pristine 6.6.18 tree as the block/HVC patches, `CONFIG_GPIO_TINYRV32IMA=y` (built-in, not a
+  module) plus `CONFIG_GPIOLIB=y`/`CONFIG_GPIO_CDEV=y` added to `linux-nommu.config`.
+
+**Verified live in the harness:** kernel boots clean, `tinyrv32-gpio: 4 pins registered` in dmesg,
+`gpiotest` requests line 0 as output, sets it high, reads back `1`, exit 0. Full transcript is in
+this session's history if the sequence ever needs re-checking.
+
+**Pushed to real hardware too, not yet booted there.** The kernel `Image` is guest-side and
+identical whether it's running under the harness or on the Pico, so the same rebuilt `Image` and
+`gpiotest` went straight onto the real SD card's `ROOTFS` (same `debugfs -w` injection as
+`lua`/`basic`/`nano`). Firmware rebuilt for all four boards with the matching CSR handler and
+published as **`pico-rv32ima-boards-v5`**; the kernel `Image` itself published as
+**`kernel-gpio-v1`** (harness and hardware share the same guest kernel, so this is the one to grab
+either way). **Not yet flashed/booted on the physical Pico** — that's the next real-hardware step,
+whenever the board's free for it.
+
+**Found and fixed a real gap while doing this:** the kernel patch series
+(`buildroot_overlay/board/tiny-rv32ima/`) that defines every custom guest-side device — block
+driver, both HVC channels, and now GPIO — only ever existed in the persistent scratch checkout at
+`~/.riscv-pico-scratch/`, never tracked in this repo. Copied it in at
+[`buildroot-overlay/`](buildroot-overlay/README.md) (132 KB, hand-written, irreplaceable the same
+way `apps/*.c` is — unlike the toolchain binary, this was never meant to be a "rebuild from a
+recipe" artifact). Edit the checked-in copy going forward and sync it back to scratch before
+rebuilding, per that README.
+
+**Original scoping note below, kept for the record — its MMIO recommendation was superseded above,
+everything else (pin budget reasoning, the I2C-expander rejection) still holds:**
 
 **Pin budget, and why it's not actually the constraint it first looks like.** Current allocation:
 UART 0/1 (disabled), SD SPI 0/2/3/4, guest-facing bit-banged SPI 5/6/7/8, PSRAM SPI 10-14, VGA

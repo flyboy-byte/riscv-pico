@@ -1,0 +1,151 @@
+From: riscv-pico
+Subject: [PATCH] GPIO driver for tiny-rv32ima (CSRs 0x1a0-0x1a3, 4 host pins)
+
+Follows the exact shape of the existing tinyrv32blk.c / second-hvc-channel custom
+devices in this tree: plain CSR instructions in a statically-registered driver, no
+device tree involvement, pin set fixed at firmware build time. A select register
+(0x1a0) picks which of four host pins subsequent dir/out/in operations apply to.
+Firmware side (core 0 HAL) lives in pico-rv32ima/hal/hal_csr.h, outside this tree.
+
+--- a/drivers/gpio/Kconfig	2026-08-29 14:17:08.743611506 -0600
++++ b/drivers/gpio/Kconfig	2026-08-29 14:17:17.253662687 -0600
+@@ -14,6 +14,12 @@
+ 
+ if GPIOLIB
+ 
++config GPIO_TINYRV32IMA
++	tristate "tiny-rv32ima GPIO support"
++	help
++	  GPIO driver for tiny-rv32ima, exposing a small fixed set of host
++	  pins to the guest via custom CSRs.
++
+ config GPIOLIB_FASTPATH_LIMIT
+ 	int "Maximum number of GPIOs for fast path"
+ 	range 32 512
+--- a/drivers/gpio/Makefile	2026-08-29 14:17:08.746532725 -0600
++++ b/drivers/gpio/Makefile	2026-08-29 14:17:17.268161263 -0600
+@@ -22,6 +22,7 @@
+ obj-$(CONFIG_GPIO_104_DIO_48E)		+= gpio-104-dio-48e.o
+ obj-$(CONFIG_GPIO_104_IDI_48)		+= gpio-104-idi-48.o
+ obj-$(CONFIG_GPIO_104_IDIO_16)		+= gpio-104-idio-16.o
++obj-$(CONFIG_GPIO_TINYRV32IMA)		+= gpio-tinyrv32.o
+ obj-$(CONFIG_GPIO_74X164)		+= gpio-74x164.o
+ obj-$(CONFIG_GPIO_74XX_MMIO)		+= gpio-74xx-mmio.o
+ obj-$(CONFIG_GPIO_ADNP)			+= gpio-adnp.o
+--- /dev/null	2026-08-27 21:14:42.302128486 -0600
++++ b/drivers/gpio/gpio-tinyrv32.c	2026-08-29 14:17:08.749858425 -0600
+@@ -0,0 +1,114 @@
++// GPIO driver for tiny-rv32ima
++// 2026, riscv-pico project
++//
++// Four host GPIOs exposed to the guest via CSRs 0x1a0-0x1a3, same shape as the
++// existing tiny-rv32ima block/SPI CSR devices: a "select" register picks which of
++// the four pins subsequent operations apply to, then dir/out/in registers act on
++// the selected pin. No device tree involvement, matching every other custom device
++// in this tree (see tinyrv32blk.c) - the pin set is fixed at firmware build time,
++// not discovered.
++
++#include <linux/module.h>
++#include <linux/gpio/driver.h>
++#include <linux/bitops.h>
++
++#define TINYRV32_GPIO_NPINS 4
++
++static inline void tinyrv32_gpio_sel(unsigned int offset)
++{
++	asm volatile("csrrw x0, 0x1a0, %0\n" : : "r"(offset));
++}
++
++static inline void tinyrv32_gpio_set_dir(int output)
++{
++	asm volatile("csrrw x0, 0x1a1, %0\n" : : "r"(output));
++}
++
++static inline void tinyrv32_gpio_set_out(int value)
++{
++	asm volatile("csrrw x0, 0x1a2, %0\n" : : "r"(value));
++}
++
++static inline int tinyrv32_gpio_get_in(void)
++{
++	int value;
++	asm volatile("csrr %0, 0x1a3" : "=r"(value));
++	return value;
++}
++
++// gpiolib expects .get_direction to answer without necessarily re-reading hardware;
++// track it locally rather than adding a fifth CSR just to read back what we already set.
++static unsigned long tinyrv32_gpio_dir_out;
++
++static int tinyrv32_gpio_get(struct gpio_chip *chip, unsigned int offset)
++{
++	tinyrv32_gpio_sel(offset);
++	return tinyrv32_gpio_get_in();
++}
++
++static void tinyrv32_gpio_set(struct gpio_chip *chip, unsigned int offset, int value)
++{
++	tinyrv32_gpio_sel(offset);
++	tinyrv32_gpio_set_out(value);
++}
++
++static int tinyrv32_gpio_direction_input(struct gpio_chip *chip, unsigned int offset)
++{
++	tinyrv32_gpio_sel(offset);
++	tinyrv32_gpio_set_dir(0);
++	clear_bit(offset, &tinyrv32_gpio_dir_out);
++	return 0;
++}
++
++static int tinyrv32_gpio_direction_output(struct gpio_chip *chip, unsigned int offset,
++					   int value)
++{
++	tinyrv32_gpio_sel(offset);
++	tinyrv32_gpio_set_dir(1);
++	tinyrv32_gpio_set_out(value);
++	set_bit(offset, &tinyrv32_gpio_dir_out);
++	return 0;
++}
++
++static int tinyrv32_gpio_get_direction(struct gpio_chip *chip, unsigned int offset)
++{
++	return test_bit(offset, &tinyrv32_gpio_dir_out) ? GPIO_LINE_DIRECTION_OUT
++							  : GPIO_LINE_DIRECTION_IN;
++}
++
++static struct gpio_chip tinyrv32_gpio_chip = {
++	.label = "tinyrv32gpio",
++	.owner = THIS_MODULE,
++	.get = tinyrv32_gpio_get,
++	.set = tinyrv32_gpio_set,
++	.direction_input = tinyrv32_gpio_direction_input,
++	.direction_output = tinyrv32_gpio_direction_output,
++	.get_direction = tinyrv32_gpio_get_direction,
++	.base = -1,
++	.ngpio = TINYRV32_GPIO_NPINS,
++	.can_sleep = false,
++};
++
++static int __init tinyrv32_gpio_init(void)
++{
++	int ret = gpiochip_add_data(&tinyrv32_gpio_chip, NULL);
++
++	if (ret) {
++		pr_err("tinyrv32-gpio: failed to register gpiochip: %d\n", ret);
++		return ret;
++	}
++
++	pr_info("tinyrv32-gpio: %d pins registered\n", TINYRV32_GPIO_NPINS);
++	return 0;
++}
++
++static void __exit tinyrv32_gpio_exit(void)
++{
++	gpiochip_remove(&tinyrv32_gpio_chip);
++}
++
++module_init(tinyrv32_gpio_init);
++module_exit(tinyrv32_gpio_exit);
++
++MODULE_AUTHOR("riscv-pico");
++MODULE_LICENSE("GPL");
