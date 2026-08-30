@@ -188,7 +188,12 @@ everything is 3.3 V native off the Pico's own rail.
 
 ### Wiring
 
-Console is USB-CDC, so no serial adapter needed.
+Console is USB-CDC, so no serial adapter needed. Everything is 3.3 V native.
+
+> [!WARNING]
+> **On the SD card module, `MOSI` and `CLK` cross over.** The module's header order does not match
+> the Pico's pin order. This is the single easiest mistake to make on the whole board, and it costs
+> you an afternoon.
 
 <details>
 <summary><b>PSRAM — two chips on a shared SPI bus</b></summary>
@@ -228,9 +233,8 @@ active-low `/RESET` or `/HOLD` on `SIO3`. One 10 kΩ covers all four pins; nothi
 | `CLK` | GP2 (pin 4) |
 | `MISO` | GP4 (pin 6) |
 
-> [!WARNING]
-> **`MOSI` and `CLK` cross over.** The module's header order does not match the Pico's pin order.
-> This is the single easiest mistake to make on the whole board.
+⚠️ **`MOSI` and `CLK` cross over** — see the warning above. The module's header order does not
+match the Pico's pin order.
 
 The card itself is plain FAT32 with `IMAGE`, `DTB`, and `ROOTFS` in the root. No special
 formatting.
