@@ -1229,9 +1229,9 @@ What's left to actually finish the GPIO milestone (in progress):
    100 print "hello"
    110 return
    ```
-   Fix: `gosub_stack[gosub_sp++] = pc + 1;` (was `= pc;`). Needs recompiling into the toolchain's
-   `apps/basic` build and re-injecting onto the SD card ROOTFS — bundled into the same rebuild pass
-   as libgpiod so it's one SD-card update instead of two.
+   Fix: `gosub_stack[gosub_sp++] = pc + 1;` (was `= pc;`). Rebuilt, injected onto the real SD card,
+   and **hardware-verified 2026-08-30** — the reproduction case above now runs to completion.
+   Published in [`apps-v2`](https://github.com/flyboy-byte/riscv-pico/releases/tag/apps-v2).
 3. Optional, not blocking: a real blink program (`gpiotest` is a one-shot set+read smoke test, no
    delay loop, not a blink demo) — `GPIO_V2_LINE_SET_VALUES_IOCTL` alternating 1/0 with sleeps, same
    ioctls/cross-compile recipe as `apps/gpiotest.c` (see `docs/GPIO_AND_BASIC_TUTORIAL.md`).
