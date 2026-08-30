@@ -3,46 +3,44 @@
 Self-contained walkthrough for what's on the SD card right now (2026-08-29) and how to use it —
 written so it also works as-is if you paste it to ChatGPT for help writing new GPIO code.
 
-## 1. Flash the firmware
+## 1. Flashing
 
-Download `pico-rv32ima-pico.uf2` from the
+**Not needed this round.** The firmware (`.uf2`) already on your Pico — `boards-v5` — already has
+GPIO CSR support and is what the LED test was verified against. Only the SD card changed today
+(new tools, a bugfix). Just put the SD card back in and boot. If you ever *do* need to reflash:
+download `pico-rv32ima-pico.uf2` from the
 [`pico-rv32ima-boards-v5`](https://github.com/flyboy-byte/riscv-pico/releases/tag/pico-rv32ima-boards-v5)
-release (use `pico2.uf2`/`pico_w.uf2`/`pico2_w.uf2` if you're on a different board variant).
+release, hold **BOOTSEL**, plug in the Pico, copy the `.uf2` onto the `RPI-RP2` drive it mounts as.
 
-Hold **BOOTSEL**, plug in the Pico, it mounts as a USB drive (`RPI-RP2`). Copy the `.uf2` onto it,
-it reboots automatically running the new firmware. The SD card with the kernel and rootfs already
-has everything below on it — no separate step needed there.
-
-Connect over USB-CDC serial (shows up as `/dev/ttyACM0` or similar) at any baud rate, or use the
-VGA/PS2 console if that's wired up. **Boot waits for a keypress before starting** — this is
-intentional (`pwr_button()` gates on `console_available()`), not a hang. Press any key once
-connected and it'll boot.
+Connect over USB-CDC serial (`/dev/ttyACM0` or similar) at any baud, or use VGA/PS2 if wired.
+**Boot waits for a keypress** before starting (`pwr_button()` gates on `console_available()`) —
+press any key once connected.
 
 ## 2. What's on the SD card
 
 | Program | What it is |
 |---|---|
-| `hello` | Minimal smoke test |
-| `basic` | Tiny BASIC interpreter |
+| `basic` | Tiny BASIC interpreter — **GOSUB bug fixed 2026-08-29, see §5** |
 | `nano` | Real GNU nano 7.2, for writing files |
 | `lua` | Real Lua 5.4.7 |
-| `gpiotest` | GPIO smoke test / reference for the chardev API below |
+| `sysinfo` | System info (replaces the old `hello` smoke test, removed 2026-08-29) |
+| `gpiotest` | GPIO one-shot smoke test (set line 0 high, read back — no delay loop, not a blink demo) |
+| `gpiodetect` / `gpioinfo` / `gpioget` / `gpioset` / `gpiofind` / `gpiomon` | `libgpiod` tools — added 2026-08-29 |
 
-Run any of them by name from the shell prompt, e.g. `basic`.
+Run any of them by name from the shell prompt.
 
 ## 3. BASIC
 
-`apps/basic.c` in the repo has the full interpreter source if you want to read it. Supported:
+`apps/basic.c` in the repo has the full interpreter source. Supported:
 
 ```
 PRINT, LET, IF ... THEN, GOTO, GOSUB, RETURN, FOR ... TO ... STEP / NEXT,
 INPUT, LIST, RUN, NEW, END, REM
 ```
 
-26 integer variables, `A`-`Z`. Line-based only — no cursor positioning, matches what the console
-renders.
+26 integer variables, `A`-`Z`. Line-based only — no cursor positioning.
 
-**Interactive use**: just run `basic` and type numbered lines, then `RUN`.
+**Interactive use**: run `basic`, type numbered lines, then `RUN`.
 
 ```
 10 FOR I = 1 TO 5
@@ -52,59 +50,90 @@ renders.
 RUN
 ```
 
-**Writing a program in `nano` and running it non-interactively**: `basic` has no file-loading
-command of its own, but it reads its input as plain lines from stdin — so shell redirection does
-the job. Write the numbered program in `nano`, end the file with a `RUN` line, save it, then:
+**Writing a program in `nano` and running it non-interactively**: `basic` reads plain lines from
+stdin, so shell redirection works. Write the numbered program in `nano`, **end the file with a
+`RUN` line** (without it, `basic` just loads the program and exits at EOF — no output), save it,
+then:
 
 ```sh
 basic < myprogram.bas
 ```
 
-This runs to completion and drops you back at the shell (it doesn't stay in an interactive BASIC
-session afterward, since it exits at end-of-input).
+**Leaving the interpreter**: `basic` has no quit command of its own — `Ctrl+C` (or `Ctrl+D` on
+EOF) exits back to the shell.
 
 ## 4. GPIO
 
-Four host pins are exposed to Linux as a real `gpiochip` — standard Linux GPIO chardev API, no
-custom protocol. This is genuinely `/dev/gpiochip0` behaving like GPIO does on any other embedded
-Linux board; any general GPIO chardev tutorial or ChatGPT answer about the Linux `GPIO_V2` uAPI
-applies directly.
+Four host pins are exposed to Linux as a real `/dev/gpiochip0` — standard `GPIO_V2` chardev uAPI,
+no custom protocol. **LED-verified on real hardware 2026-08-29** (physical pin 2, via `gpiotest`).
 
 ### The 4 available lines
 
-| Line offset (what you request) | RP2040 GPIO | Physical Pico pin |
+| Line offset | RP2040 GPIO | Physical Pico pin |
 |---|---|---|
 | 0 | GP1 | pin 2 |
 | 1 | GP9 | pin 12 |
 | 2 | GP15 | pin 20 |
 | 3 | GP22 | pin 29 |
 
-Check with:
-```sh
-cat /sys/kernel/debug/gpio 2>/dev/null   # may not be mounted; not required
-```
-or just trust the table above — it's fixed in firmware
-(`upstream/pico-rv32ima/pico-rv32ima/hal/hal_csr.h`, `gpio_csr_pins[]`).
+Fixed in firmware (`upstream/pico-rv32ima/pico-rv32ima/hal/hal_csr.h`, `gpio_csr_pins[]`).
 
-**Wiring an LED**: pin (positive leg through a ~330Ω resistor) → your chosen physical pin above,
-LED negative leg → any GND pin (pins 3, 8, 13, 18, 23, 28, 33, 38).
+**Wiring an LED**: positive leg through a ~330Ω resistor → your chosen physical pin, negative leg
+→ any GND pin (3, 8, 13, 18, 23, 28, 33, 38).
 
 **Wiring a button**: one leg → your chosen physical pin, other leg → GND. No internal pull-up/down
-is implemented by this driver — wire an external pull-down (or pull-up) resistor, or a
-button+resistor module, don't rely on requesting a bias flag to do anything.
+is implemented — wire an external pull resistor.
 
-### Reading/writing from the shell — no tooling installed for this yet
+### Using it from the shell — no compiling required
 
-This rootfs doesn't have `libgpiod`'s `gpioset`/`gpioget` command-line tools built in. Two options:
+`gpioset`/`gpioget`/`gpioinfo`/`gpiodetect` are now on the card. One-shot:
 
-1. **Use/adapt `gpiotest`** (already on the card) — it's a ~70-line C program that requests line 0
-   as an output, sets it high, and reads it back. Source is `apps/gpiotest.c` in the repo. Copy and
-   modify it for whatever pin/behavior you want, then cross-compile (see "Building new programs"
-   below).
-2. **Ask for `libgpiod`'s `gpioset`/`gpioget` to be buildroot-packaged** — a config change
-   (`BR2_PACKAGE_LIBGPIOD=y`) plus a rootfs rebuild, not done yet.
+```sh
+gpiodetect                    # confirm gpiochip0 shows up
+gpioinfo gpiochip0             # see all 4 lines and their state
+gpioset gpiochip0 0=1          # drive line 0 (pin 2) high
+gpioget gpiochip0 0            # read line 0 back
+```
 
-### The raw API, for writing your own program (or handing to ChatGPT)
+**Blinking without a compiled binary** — a plain shell script, no C needed:
+
+```sh
+while true; do
+  gpioset gpiochip0 0=1
+  sleep 1
+  gpioset gpiochip0 0=0
+  sleep 1
+done
+```
+Caveat: `gpioset` (libgpiod v1) releases the line back to its default state each time the process
+exits, so there may be a brief flicker between calls depending on driver defaults — untested on
+this hardware yet. If it's ugly, the fallback is a small C program that holds the line open for
+the whole loop (pattern below).
+
+### Writing and running your own shell script
+
+```sh
+cat > blink.sh << 'EOF'
+#!/bin/sh
+while true; do
+  gpioset gpiochip0 0=1
+  sleep 1
+  gpioset gpiochip0 0=0
+  sleep 1
+done
+EOF
+chmod +x blink.sh
+./blink.sh          # runs in foreground, Ctrl+C to stop
+./blink.sh &         # backgrounds it — shell prompt returns immediately
+```
+
+**No `ps`/`kill` on this image** (confirmed — `CONFIG_PS`/`CONFIG_KILL`/`CONFIG_KILLALL` are unset
+in busybox). Once you background something with `&`, there is no built-in way to list or kill it
+individually — only rebooting/power-cycling reliably stops it. Don't background anything you don't
+have another way to stop. (Adding `ps`/`kill` is a one-line buildroot config change + rebuild if
+you ever want that — not done.)
+
+### The raw C API, for writing your own program (or handing to ChatGPT)
 
 ```c
 #include <fcntl.h>
@@ -113,7 +142,6 @@ This rootfs doesn't have `libgpiod`'s `gpioset`/`gpioget` command-line tools bui
 
 int fd = open("/dev/gpiochip0", O_RDWR);
 
-// Request a line as output
 struct gpio_v2_line_request req = {0};
 req.offsets[0] = 0;              // 0-3, see the table above
 req.num_lines = 1;
@@ -121,21 +149,17 @@ req.config.flags = GPIO_V2_LINE_FLAG_OUTPUT;   // or GPIO_V2_LINE_FLAG_INPUT
 strcpy(req.consumer, "myprogram");
 ioctl(fd, GPIO_V2_GET_LINE_IOCTL, &req);       // req.fd is now the line handle
 
-// Set it high
 struct gpio_v2_line_values vals = {0};
 vals.mask = 1;
 vals.bits = 1;                                  // 1 = high, 0 = low
 ioctl(req.fd, GPIO_V2_LINE_SET_VALUES_IOCTL, &vals);
 
-// Read it back
 ioctl(req.fd, GPIO_V2_LINE_GET_VALUES_IOCTL, &vals);
 // vals.bits & 1 is the current level
 ```
 
-That's the entire API surface this driver supports: request, set, get. No edge/interrupt detection,
-no pull-up/down bias, no debounce — all real `GPIO_V2` uAPI features that exist in the kernel but
-this particular driver doesn't implement. If you (or ChatGPT) write code assuming those work, it'll
-either silently no-op or fail the ioctl — the request/set/get path above is what's guaranteed.
+No edge/interrupt detection, no bias, no debounce implemented by this driver — request/set/get is
+the guaranteed surface.
 
 ### Building new programs
 
@@ -143,22 +167,33 @@ either silently no-op or fail the ioctl — the request/set/get path above is wh
 GCC=~/.riscv-pico-scratch/repo/buildroot/output/host/bin/riscv32-buildroot-linux-uclibc-gcc
 $GCC -mabi=ilp32 -fPIE -pie -static -march=rv32ima -Os -s -Wl,-elf2flt=-r yourprogram.c -o yourprogram
 ```
-`-fPIE -pie` are not optional — dropping them causes a runtime segfault, not a build error (this
-bit a real program during development, see PLAN.md). Then inject it onto the SD card:
+`-fPIE -pie` are not optional — dropping them causes a runtime segfault, not a build error. Then
+inject it onto the SD card (the file directly on the FAT partition when mounted on a PC, not a
+loopback device — `debugfs` treats it as a plain ext2 image):
 ```sh
 debugfs -w -R "write yourprogram usr/bin/yourprogram" /path/to/ROOTFS
 debugfs -w -R "sif usr/bin/yourprogram mode 0100755" /path/to/ROOTFS
 ```
-(`/path/to/ROOTFS` is the file directly on the SD card's FAT partition when you mount it on a PC —
-not a loopback device, it's a plain file debugfs treats as an ext2 image.)
 
-## 5. What's underneath, if you want the full story
+## 5. What changed today (2026-08-29)
 
-- `PLAN.md` in the repo — the living state doc, has the complete history of what was built, why,
-  and what broke along the way (the "GPIO access for the guest" and "PSRAM bus" sections are the
-  relevant ones from this session).
-- `docs/HARDWARE_SCHEMATIC.md` — the wiring/power situation on the breadboard, if you're adding
-  more hardware.
-- `buildroot-overlay/board/tiny-rv32ima/patches/linux/6.6.18/0004-gpio-driver.patch` — the actual
-  kernel driver source, if you or ChatGPT want to extend it (add more pins, add pull-up/down
-  support, add edge detection).
+- **`apps/basic.c` GOSUB bug, fixed.** `do_gosub` was pushing the `GOSUB` line's own index onto
+  the return stack instead of `pc + 1`. `RETURN` landed back on the `GOSUB` statement itself, not
+  the line after it, so any `FOR ... GOSUB ... NEXT` loop ran forever (never reached `NEXT`, `i`
+  never incremented). One-line fix: `gosub_stack[gosub_sp++] = pc + 1;`. Rebuilt and injected onto
+  the SD card.
+- **`libgpiod` tools added** (`gpiodetect`/`gpioinfo`/`gpioget`/`gpioset`/`gpiofind`/`gpiomon`) —
+  `BR2_PACKAGE_LIBGPIOD=y` + `BR2_PACKAGE_LIBGPIOD_TOOLS=y` in the buildroot config, full rootfs
+  rebuild, tools injected onto the existing SD card ROOTFS.
+- **`hello` removed** (redundant with `sysinfo`).
+- **Lua and a GPIO C binding**: stock Lua 5.4 has no `ioctl()`/FFI, so it can't touch
+  `/dev/gpiochip0` directly. `os.execute("gpioset gpiochip0 0=1")` works today with no further
+  build. A real `gpio.output()`/`pin:set()` Lua C module is documented as an option in PLAN.md, not
+  built — skip it unless it's actually needed, `os.execute` already covers scripting GPIO from Lua.
+
+## 6. Full story, if you want it
+
+- `PLAN.md` — living state doc, "GPIO access for the guest" and "Finishing GPIO" sections.
+- `docs/HARDWARE_SCHEMATIC.md` — wiring/power situation on the breadboard.
+- `buildroot-overlay/board/tiny-rv32ima/patches/linux/6.6.18/0004-gpio-driver.patch` — the kernel
+  driver source, if extending it (more pins, pull-up/down, edge detection).

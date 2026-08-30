@@ -383,7 +383,7 @@ static void do_gosub(void)
         running = 0;
         return;
     }
-    gosub_stack[gosub_sp++] = pc;
+    gosub_stack[gosub_sp++] = pc + 1;
     goto_line(n);
 }
 

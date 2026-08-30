@@ -1198,6 +1198,72 @@ this unless a future need genuinely wants more than a handful of pins.
 whichever pins are free at the time — smallest possible driver, no I2C passthrough, no expander.
 Not started; this is a scoping note, not a commitment to build it now.
 
+### Finishing GPIO — in progress (2026-08-29)
+
+Framing that stuck: this project isn't "Linux boots on a Pico" anymore, it's a **paravirtualized
+RISC-V machine hosted by the RP2040** — Linux sees standard devices (block, console, now GPIO via
+a real `/dev/gpiochip0` + `GPIO_V2` uAPI, not a custom `/dev/picogpio`), firmware translates guest
+ops to real hardware. That pattern — standard Linux subsystem on top, custom CSR transport
+underneath — is worth preserving, but **scope stays GPIO for now**; I2C/PWM/ADC were floated as a
+"next milestone" roadmap and explicitly walked back — see "Future peripherals" below.
+
+**Hardware-verified 2026-08-29**: LED wired to physical pin 2 (GP1, line 0) through a resistor,
+`gpiotest` drove it on, confirmed lit. `ls /dev` shows `/dev/gpiochip0`. This closes the loop —
+custom CSR → RISC-V emulator → RP2040 GPIO → real LED, working end to end.
+
+What's left to actually finish the GPIO milestone (in progress):
+
+1. **`libgpiod` (`gpioinfo`/`gpioget`/`gpioset`) into the buildroot image** —
+   `BR2_PACKAGE_LIBGPIOD=y` + `BR2_PACKAGE_LIBGPIOD_TOOLS=y` set in
+   `~/.riscv-pico-scratch/repo/buildroot/.config`, rootfs rebuild kicked off. Once done: no more
+   custom C program needed for every GPIO experiment.
+2. **`apps/basic.c` GOSUB bug fixed** (found live while testing on hardware, 2026-08-29): `do_gosub`
+   pushed the GOSUB line's own index onto the return stack instead of `pc + 1` (inconsistent with
+   `do_for`'s `return_line = pc + 1`), so `RETURN` landed back on the `GOSUB` statement itself
+   instead of the line after it — any `FOR ... GOSUB ... NEXT` loop ran forever, reproduced with:
+   ```
+   10 for i = 1 to 10
+   20 gosub 100
+   30 next i
+   40 end
+   100 print "hello"
+   110 return
+   ```
+   Fix: `gosub_stack[gosub_sp++] = pc + 1;` (was `= pc;`). Needs recompiling into the toolchain's
+   `apps/basic` build and re-injecting onto the SD card ROOTFS — bundled into the same rebuild pass
+   as libgpiod so it's one SD-card update instead of two.
+3. Optional, not blocking: a real blink program (`gpiotest` is a one-shot set+read smoke test, no
+   delay loop, not a blink demo) — `GPIO_V2_LINE_SET_VALUES_IOCTL` alternating 1/0 with sleeps, same
+   ioctls/cross-compile recipe as `apps/gpiotest.c` (see `docs/GPIO_AND_BASIC_TUTORIAL.md`).
+4. Optional, not blocking: two small driver-quality fixes to `gpio-tinyrv32.c` — make select-line +
+   op one atomic CSR transaction (currently two separate writes, a caller could theoretically race
+   another caller's selected line); load the intended output value before enabling the driver on
+   direction-to-output, so it doesn't briefly drive a stale latched value.
+
+### Future peripherals (I2C/PWM/ADC) — documented option only, not a roadmap commitment (2026-08-29)
+
+Raised as a possible "next milestone after GPIO" and **explicitly walked back by the user** — "idk
+about the i2c and pwm and stuff. honestly that can just be a documented option. bc we can bloat
+this fast." Keep this as a note for *if* it's ever wanted, not a plan to execute:
+
+- Same pattern as GPIO would apply: real Linux subsystem on top (`i2c_adapter` → `/dev/i2c-0` for
+  I2C, Linux IIO for ADC, the Linux PWM subsystem for PWM), custom CSR transport underneath, RP2040
+  actually drives the bus/pin.
+- I2C's payoff milestone would be `i2cdetect -y 0` against a real sensor (BME280/RTC/EEPROM/IMU)
+  wired to the Pico.
+- SPI was considered and rejected as a candidate even if this gets picked up later — already
+  heavily used for SD/PSRAM, and that bus is already the most electrically sensitive part of the
+  machine (see the PSRAM/OLED power-sharing bug above).
+- Don't start any of this without a fresh explicit ask — the project's own scope fence (CLAUDE.md:
+  "don't turn this into a framework... don't add abstraction layers that nobody asked for") applies
+  directly here.
+
+Optional stronger hardware test than `gpiotest`/an LED, if ever wanted: **physical loopback** — one
+exposed line as output, wired through a resistor to a second exposed line as input, alternate
+high/low, verify Linux reads the transition. Validates the full path: Linux userspace → kernel GPIO
+driver → custom CSR → RISC-V emulator → RP2040 GPIO → wire → RP2040 GPIO → CSR → Linux. Not
+required, just the most complete confidence check available without new hardware.
+
 ### `curl` and `sysinfo` — real userspace tools added (2026-08-17)
 
 User asked for `neofetch` and `curl`. **`neofetch` is a hard no, not a config option**: it

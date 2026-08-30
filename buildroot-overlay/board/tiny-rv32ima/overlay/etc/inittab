@@ -14,8 +14,8 @@
 # process   == program to run
 
 # Startup the system
-# ::sysinit:/bin/mount -o remount, rw /
 ::sysinit:/bin/mount -a
+::sysinit:/bin/mount -o remount,rw /
 ::sysinit:/etc/load_modules.sh
 
 # Put a console on the serial port

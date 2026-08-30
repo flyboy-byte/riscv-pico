@@ -16,7 +16,7 @@
 // rw: no init script remounts root, and a read-only rootfs silently breaks anything writing
 // to it (nano's save, /tmp files) with no error surfaced anywhere. Harness-only change — the
 // upstream vm_config.h this mirrors is deliberately left untouched (see CLAUDE.md's scope fence).
-#define KERNEL_CMDLINE "console=hvc0 root=fe00 rw"
+#define KERNEL_CMDLINE "console=hvc0 root=fe00"
 
 #define EMULATOR_TIME_DIV 1
 #define EMULATOR_FIXED_UPDATE 0
