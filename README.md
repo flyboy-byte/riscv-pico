@@ -1,5 +1,5 @@
 <p align="center">
-  <img src="docs/images/header.jpg" alt="" width="100%">
+  <img src="docs/images/header.jpg" alt="" width="72%">
 </p>
 
 <h1 align="center">riscv-pico</h1>
@@ -90,14 +90,18 @@ A desktop build of the **real** emulator core — same kernel, same rootfs, no P
 ```sh
 harness/build.sh
 mkdir images
-gh release download kernel-gpio-v2 --repo flyboy-byte/riscv-pico --pattern "*.tar.gz" -O - | tar xz -C images
-gh release download net-v1 --repo flyboy-byte/riscv-pico --pattern "*.tar.gz" -O net.tar.gz
-tar xzf net.tar.gz -C images dtb
+
+# current kernel + rootfs, plus the DTB from the networking release
+gh release download kernel-gpio-v2 -R flyboy-byte/riscv-pico -p "*.tar.gz" -O - | tar xz -C images
+gh release download net-v1 -R flyboy-byte/riscv-pico -p "*.tar.gz" -O - | tar xz -C images dtb
+
+# lay them out on a FAT image the way the firmware expects
 dd if=/dev/zero of=harness/disk.img bs=1M count=80
 mformat -F -i harness/disk.img ::
 mcopy -i harness/disk.img images/Image       ::IMAGE
 mcopy -i harness/disk.img images/dtb         ::DTB
 mcopy -i harness/disk.img images/rootfs.ext2 ::ROOTFS
+
 python3 harness/desktop_terminal.py harness/disk.img
 ```
 
@@ -122,36 +126,28 @@ The interesting part isn't that Linux boots. It's that the emulated guest can re
 hardware** — so `echo 1 > /sys/class/gpio/gpio512/value`, typed into a Linux shell, ends with
 current flowing out of a physical pin.
 
-```mermaid
-flowchart TB
-    subgraph guest["RISC-V Linux guest — emulated"]
-        direction TB
-        app["your shell · BASIC · Lua · nano"]
-        kern["Linux 6.6 kernel · nommu · RV32IMA"]
-        drv["custom drivers<br/>gpio-tinyrv32 · block · console"]
-        app --> kern --> drv
-    end
-
-    subgraph pico["Raspberry Pi Pico — RP2040 @ 400 MHz"]
-        direction TB
-        emu["tiny-rv32ima<br/>RV32IMA interpreter<br/><i>core 1</i>"]
-        hal["CSR handlers + I/O<br/><i>core 0</i>"]
-    end
-
-    subgraph real["Real hardware"]
-        direction TB
-        psram["2× SPI PSRAM<br/>16 MB = system memory"]
-        sd["microSD<br/>kernel + rootfs"]
-        pins["GPIO pins<br/>LEDs, buttons"]
-        oled["SSD1306 OLED"]
-    end
-
-    drv -->|"CSR instructions<br/>0x1a0–0x1a3 for GPIO"| emu
-    emu <--> psram
-    emu --> hal
-    hal --> sd
-    hal --> pins
-    hal --> oled
+```
+┌─────────────────────────────────────────────────────────────────┐
+│  RISC-V Linux guest                                 (emulated)  │
+│                                                                 │
+│      your shell  ·  BASIC  ·  Lua  ·  nano                      │
+│                       │                                         │
+│      Linux 6.6, nommu, RV32IMA                                  │
+│                       │                                         │
+│      drivers:  gpio-tinyrv32  ·  block  ·  console              │
+└───────────────────────┬─────────────────────────────────────────┘
+                        │   CSR instructions   (GPIO = 0x1a0-0x1a3)
+┌───────────────────────┴─────────────────────────────────────────┐
+│  RP2040  @ 400 MHz                              (real silicon)  │
+│                                                                 │
+│      core 1  ──▶  tiny-rv32ima, the RV32IMA interpreter         │
+│      core 0  ──▶  CSR handlers, console, OLED                   │
+└───────────────────────┬─────────────────────────────────────────┘
+                        │
+     ┌──────────────────┼──────────────────┬──────────────────┐
+     ▼                  ▼                  ▼                  ▼
+ 2x SPI PSRAM      microSD card        GPIO pins        SSD1306 OLED
+ 16 MB = RAM     kernel + rootfs     LEDs, buttons      status panel
 ```
 
 Linux sees ordinary devices — a block device, a `gpiochip`, a console. The RP2040 does the
