@@ -268,6 +268,14 @@ fast and avoids shipping opaque binaries in commits.
 Grab whichever you need, or build your own — see `apps/`, `firmware/build.sh`, and PLAN.md's
 "Cross-compile toolchain" section.
 
+## The actual thing
+
+![The breadboard mid-session — Pico, PSRAM, SD card, OLED showing live stats](docs/images/breadboard.jpg)
+
+This is what all of the above actually looks like on a desk. That's the OLED panel from above,
+live, showing 16 MB across two PSRAM chips, current MIPS, uptime, clock speed — all of it running
+on the wire mess to its right.
+
 ## Licenses
 
 This repo's own code (`harness/`, `apps/`, `firmware/`, docs) is MIT — see [LICENSE](LICENSE).
