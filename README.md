@@ -6,18 +6,26 @@ RISC-V Linux, running on a Raspberry Pi Pico — by emulating a full RV32IMA CPU
 itself, with SPI PSRAM standing in for system memory and an SD card holding the kernel and rootfs.
 
 **This works on real hardware** — a Pico H with two SPI PSRAM chips (16 MB) and an SD card boots
-to a Linux shell and runs GNU nano. And you can try it *without* any hardware: a desktop build of
-the real emulator core boots the same kernel to a shell in about a second, in a real terminal app.
+to a Linux shell, runs GNU nano and Lua, and drives real GPIO pins. And you can try it *without*
+any hardware: a desktop build of the real emulator core boots the same kernel to a shell in about
+a second, in a real terminal app.
 
 ## Highlights
 
 - **Boots Linux on an actual Pico.** 16 MB across two SPI PSRAM chips, kernel and 60 MB rootfs off
   an SD card, shell in ~16 seconds. Full-screen GNU nano runs and saves files on it.
+- **Real GPIO from the guest, two ways.** A standard `/dev/gpiochipN` chardev (`GPIO_V2` uAPI,
+  `libgpiod` tools included) and the classic `/sys/class/gpio` file interface, both talking
+  through custom CSRs to real RP2040 pins — wire an LED, drive it from a shell script or Lua with
+  nothing but `echo`/`cat`. See [docs/GPIO_AND_BASIC_TUTORIAL.md](docs/GPIO_AND_BASIC_TUTORIAL.md).
 - **Boots real Linux with zero hardware, too.** `harness/desktop_terminal.py` — a menu-bar app
   (reboot, RAM-config switch, disk-image picker), not a raw CLI.
-- **Runs real software on it.** A working cross-compiler wrote and ran a Tiny BASIC interpreter
-  and real **GNU nano 7.2**, full-screen editing included — plus `curl` and a hush-compatible
-  `sysinfo` (real `neofetch` needs bash, which needs an MMU this target doesn't have).
+- **Runs real software on it.** A working cross-compiler built and runs a Tiny BASIC interpreter,
+  real **Lua 5.4.7**, and real **GNU nano 7.2** with full-screen editing — plus `curl` and a
+  hush-compatible `sysinfo` (real `neofetch` needs bash, which needs an MMU this target doesn't
+  have).
+- **SSD1306 OLED status panel, hardware-verified.** Runs alongside PSRAM with no shared-power
+  interference — see the wiring note below.
 - **Working TCP/IP stack**, loopback-verified, with a second console channel bridging it toward
   the host (half-built — see [PLAN.md](PLAN.md)).
 - **Firmware builds clean for all four board targets** — `pico`, `pico_w`, `pico2`, `pico2_w` —
@@ -32,8 +40,10 @@ the tour.
 
 ```sh
 harness/build.sh
+mkdir images
+gh release download kernel-gpio-v2 --repo flyboy-byte/riscv-pico --pattern "*.tar.gz" -O - | tar xz -C images
 gh release download net-v1 --repo flyboy-byte/riscv-pico --pattern "*.tar.gz" -O net.tar.gz
-mkdir images && tar xzf net.tar.gz -C images
+tar xzf net.tar.gz -C images dtb
 dd if=/dev/zero of=harness/disk.img bs=1M count=80
 mformat -F -i harness/disk.img ::
 mcopy -i harness/disk.img images/Image       ::IMAGE
@@ -43,7 +53,10 @@ python3 harness/desktop_terminal.py harness/disk.img
 ```
 
 Needs `mtools` (no root required) and `PyQt6` + `python-pyte` (`sudo pacman -S python-pyte` on
-Arch). Boots to a shell in a couple seconds — try `nano`, `curl --version`, `sysinfo`.
+Arch). Boots to a shell in a couple seconds — try `nano`, `curl --version`, `sysinfo`, `gpioinfo
+gpiochip0`. (`basic`/`lua`/`gpiotest` aren't in this rootfs — grab
+[`apps-v2`](https://github.com/flyboy-byte/riscv-pico/releases/tag/apps-v2) and inject them with
+`debugfs -w`, see PLAN.md's "apps/" section for the exact recipe.)
 
 **These images won't boot under stock `mini-rv32ima`** — this firmware's emulator core has custom
 block-device and console CSRs that stock builds don't implement. `harness/build.sh` builds this
@@ -68,10 +81,12 @@ Everything ultimately descends from [CNLohr's mini-rv32ima](https://github.com/c
 
 A real cross-compiler for this target (`riscv32-buildroot-linux-uclibc-gcc`, produces the `bFLT`
 no-MMU binary format this kernel needs) has been built and proven — see `apps/` for working
-examples (`hello.c`, a Tiny BASIC interpreter in `basic.c`, `sysinfo.sh`). The toolchain itself
-isn't checked in (it's a real buildroot build, doesn't belong in git) — the rebuild recipe,
-including a few real gotchas already solved so you don't have to re-discover them, is in PLAN.md's
-"Cross-compile toolchain" and "Real GNU nano" sections.
+examples (a Tiny BASIC interpreter in `basic.c`, a GPIO chardev smoke test in `gpiotest.c`,
+`sysinfo.sh`). Real Lua 5.4.7 and GNU nano 7.2 are built the same way from their unmodified
+upstream sources, not vendored here. The toolchain itself isn't checked in (it's a real buildroot
+build, doesn't belong in git) — the rebuild recipe, including a few real gotchas already solved so
+you don't have to re-discover them, is in PLAN.md's "Cross-compile toolchain" and "Real GNU nano"
+sections.
 
 ## Building the firmware for real hardware
 
@@ -153,8 +168,8 @@ is the easiest mistake to make here.
 mismatching them is a compile-time `#error`, not a silent address-wrap bug.
 `PSRAM_SPI_SPEED_MHZ` defaults to 20, stable even on flying leads.
 
-**SSD1306 status panel** (optional, 128×64 I2C OLED — code is in, panel not yet verified on
-hardware). Four separate jumpers; there is no free adjacent GPIO pair left on the board:
+**SSD1306 status panel** (optional, 128×64 I2C OLED — hardware-verified 2026-08-29). Four separate
+jumpers; there is no free adjacent GPIO pair left on the board:
 
 | Module | Pico |
 | --- | --- |
@@ -180,14 +195,15 @@ avoids shipping opaque binaries in commits.
 | Release | What |
 | --- | --- |
 | [`toolchain-v2`](https://github.com/flyboy-byte/riscv-pico/releases/tag/toolchain-v2) | `riscv32-buildroot-linux-uclibc-gcc`, wchar-enabled (needed for nano/ncurses) |
-| [`apps-v1`](https://github.com/flyboy-byte/riscv-pico/releases/tag/apps-v1) | Prebuilt `hello`, `basic`, `nano`, `sysinfo` |
+| [`pico-rv32ima-boards-v5`](https://github.com/flyboy-byte/riscv-pico/releases/tag/pico-rv32ima-boards-v5) | **Current firmware, all four boards** — two-chip 16 MB, SSD1306 status panel, GPIO CSR handler. |
+| [`kernel-gpio-v2`](https://github.com/flyboy-byte/riscv-pico/releases/tag/kernel-gpio-v2) | **Current kernel + rootfs** — `/sys/class/gpio` alongside `/dev/gpiochipN`, root-rw fix, `libgpiod` tools, working `sleep`. |
+| [`apps-v2`](https://github.com/flyboy-byte/riscv-pico/releases/tag/apps-v2) | **Current apps** — `basic` (bugfix), `lua`, `gpiotest`, `libgpiod` CLI tools. `nano`/`sysinfo` unchanged, still on `apps-v1`. |
+| [`apps-v1`](https://github.com/flyboy-byte/riscv-pico/releases/tag/apps-v1) | `nano`, `sysinfo` (still current); `hello`, old `basic` — superseded by `apps-v2`. |
 | [`rv32harness-v1`](https://github.com/flyboy-byte/riscv-pico/releases/tag/rv32harness-v1) | Desktop harness binaries, x86_64 Linux |
-| [`net-v1`](https://github.com/flyboy-byte/riscv-pico/releases/tag/net-v1) | Kernel + rootfs — TCP/IP stack, second HVC channel, `curl`, `sysinfo` |
-| [`pico-rv32ima-boards-v3`](https://github.com/flyboy-byte/riscv-pico/releases/tag/pico-rv32ima-boards-v3) | **Prebuilt `.uf2` firmware, all four boards — two-chip 16 MB, plus the SSD1306 status panel.** Plus `sdtest.uf2`, a standalone SD-over-SPI diagnostic. |
+| [`net-v1`](https://github.com/flyboy-byte/riscv-pico/releases/tag/net-v1) | TCP/IP stack, second HVC channel — superseded for GPIO by `kernel-gpio-v2`, still the reference for networking |
 
-`pico-rv32ima-boards-v2` is the previous build (16 MB, no status panel) and still boots fine;
-`pico-rv32ima-boards-v1` is superseded — it holds the single-chip 8 MB builds, which were never
-flashed and no longer boot the current rootfs.
+`pico-rv32ima-boards-v3`/`v4` are earlier firmware and still boot fine; `-v1`/`-v2` are superseded
+(single-chip 8 MB builds, never flashed, don't boot the current rootfs).
 
 Grab whichever you need, or build your own — see `apps/`, `firmware/build.sh`, and PLAN.md's
 "Cross-compile toolchain" section.
