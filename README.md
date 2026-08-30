@@ -88,12 +88,13 @@ What's actually verified, versus what merely compiles. No wishful thinking in th
 A desktop build of the **real** emulator core — same kernel, same rootfs, no Pico required.
 
 ```sh
+git clone https://github.com/flyboy-byte/riscv-pico && cd riscv-pico
 harness/build.sh
 mkdir images
 
 # current kernel + rootfs, plus the DTB from the networking release
-gh release download kernel-gpio-v2 -R flyboy-byte/riscv-pico -p "*.tar.gz" -O - | tar xz -C images
-gh release download net-v1 -R flyboy-byte/riscv-pico -p "*.tar.gz" -O - | tar xz -C images dtb
+gh release download kernel-gpio-v2 -p "*.tar.gz" -O - | tar xz -C images
+gh release download net-v1 -p "*.tar.gz" -O - | tar xz -C images dtb
 
 # lay them out on a FAT image the way the firmware expects
 dd if=/dev/zero of=harness/disk.img bs=1M count=80
