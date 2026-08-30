@@ -2,37 +2,63 @@
 
 ![Raspberry Pi Pico W running Linux](docs/images/header.jpg)
 
+*This repo was built almost entirely by [Claude Code](https://claude.com/claude-code) — I directed
+it, tested on real hardware, and made the calls, but the code, docs, and this README are its work.*
+
+**This isn't an improvement on anyone's upstream project, and it isn't trying to be.** It's a
+build log for my own vibe-coded "Linux on a Pico" project — the two real projects it's built on
+did the actual hard work, this repo just forks/ports/glues them together and documents what
+happened. Sharing it in case it's useful to someone else who stumbles onto the same idea.
+
+**Built on:**
+- [tvlad1234/pico-rv32ima](https://github.com/tvlad1234/pico-rv32ima) and its
+  [tiny-rv32ima](https://github.com/tvlad1234/tiny-rv32ima) emulator core — the actively
+  maintained project this repo forks and ports features into.
+- [ElectroBoy404NotFound/pico-linux](https://github.com/ElectroBoy404NotFound/pico-linux) — the
+  source of the multi-chip PSRAM port and LCD console ideas used here.
+- [CNLohr's mini-rv32ima](https://github.com/cnlohr/mini-rv32ima) — the original RV32IMA-in-C
+  emulator everything above (and this) ultimately descends from.
+- [xhackerustc's uc-rv32ima](https://github.com/xhackerustc/uc-rv32ima) — the cache implementation
+  `pico-linux` (and therefore this) actually runs.
+
+Go star their repos, not this one.
+
+## What this actually is
+
 A $4 microcontroller has no business running Linux. It has no MMU, no real RAM to speak of, and
 was never meant to run an OS. This project makes it happen anyway: the RP2040 software-emulates a
 full RV32IMA CPU, two SPI PSRAM chips stand in for system memory, and an SD card holds the kernel
-and root filesystem. The result boots to a real Linux shell, on a Pico, that you can SSH-flavored
-poke at over USB serial.
+and root filesystem.
 
-It actually works. A Pico H with 16 MB of PSRAM and an SD card boots to a shell, runs GNU nano and
-Lua, and drives real GPIO pins from a shell script. If you don't have the hardware yet, you can
-still try the whole thing on your own machine — a desktop build of the *real* emulator core boots
-the same kernel to a shell in about a second, no Pico required.
+It works on real hardware — a Pico H with 16 MB of PSRAM and an SD card boots to a shell, runs GNU
+nano and Lua, and drives real GPIO pins from a shell script. If you don't have the hardware, you
+can still try the whole thing on your own machine first — a desktop build of the *real* emulator
+core boots the same kernel to a shell in about a second, no Pico required.
 
 ## What it actually does
 
 - **Boots Linux on real hardware.** 16 MB across two SPI PSRAM chips, kernel + 60 MB rootfs off an
-  SD card, shell in about 16 seconds. Full-screen `nano` runs and saves files on it, like a real
-  computer.
-- **Same thing with zero hardware.** `harness/desktop_terminal.py` is a proper little app (reboot
-  button, RAM-config switch, disk-image picker) wrapping the real emulator core — not a toy stub.
-- **Real GPIO, from Linux, driving real pins.** Wire an LED to a Pico pin and turn it on with
-  `echo 1 > /sys/class/gpio/gpio512/value`, or use the standard `/dev/gpiochipN` chardev API and
-  `libgpiod` tools instead — both are wired through to real RP2040 GPIO under the hood. Details in
+  SD card, shell in well under a minute.
+- **Same thing with zero hardware.** `harness/desktop_terminal.py` — reboot button, RAM-config
+  switch, disk-image picker — wrapping the real emulator core, not a stub.
+- **Real GPIO from Linux, driving real pins.** A custom kernel driver exposes four RP2040 pins two
+  ways at once: the standard `/dev/gpiochipN` chardev API (`libgpiod` tools included), and the
+  classic `/sys/class/gpio` file interface — `echo 1 > .../value` turns a real LED on. Details in
   [docs/GPIO_AND_BASIC_TUTORIAL.md](docs/GPIO_AND_BASIC_TUTORIAL.md).
-- **A real cross-compiler, and real software running on it.** Tiny BASIC, Lua 5.4.7, GNU nano 7.2
-  (full-screen editing and all), `curl`, and a `sysinfo` command all run on the actual guest — not
-  simulated, not stubbed.
-- **An OLED status panel, if you want one.** SSD1306, I2C, hardware-verified — shows RAM config,
-  boot stage, live MIPS, uptime.
-- **A working TCP/IP stack**, loopback-verified, with a second console channel reaching toward the
-  host (half-built, see [PLAN.md](PLAN.md) if you want to help finish it).
+- **Real software actually running on it.** A working cross-compiler built Tiny BASIC, real Lua
+  5.4.7, and real GNU nano 7.2 (full-screen editing included) for this target, and all three run
+  on the guest. `curl`'s in there too, mostly to prove the networking stack isn't fake.
+- **An SSD1306 OLED status bar, hardware-verified.** Shows RAM config, boot stage, live MIPS,
+  uptime — runs alongside PSRAM with no shared-power interference (that took a real bug hunt, see
+  the wiring notes below).
+- **Custom kernel drivers, not hacks bolted on top.** The block device, GPIO, and second console
+  channel are all real Linux drivers talking through custom CSRs to the emulator — Linux sees
+  standard devices, the RP2040 does the translating.
+- **A working TCP/IP stack**, loopback-verified, reaching toward the host (half-built, see
+  [PLAN.md](PLAN.md)).
 - **Firmware builds clean for all four Pico variants** — `pico`, `pico_w`, `pico2`, `pico2_w` —
-  with one script.
+  though only the original `pico` (RP2040) has actually been tested on real hardware so far;
+  `pico2`/`pico2_w` compile clean but are unverified.
 - **Every build ships as a GitHub release**, not as binaries bloating the git history.
 
 [PLAN.md](PLAN.md) is the living state doc — every decision, every bug, what's next. This file is
@@ -55,13 +81,13 @@ python3 harness/desktop_terminal.py harness/disk.img
 ```
 
 You'll need `mtools` (no root required) and `PyQt6` + `python-pyte` (`sudo pacman -S python-pyte`
-on Arch). It boots to a shell in a couple of seconds — poke around with `nano`, `curl --version`,
+on Arch). Boots to a shell in a couple seconds — poke around with `nano`, `curl --version`,
 `sysinfo`, `gpioinfo gpiochip0`. (`basic`/`lua`/`gpiotest` aren't in this particular rootfs — grab
 [`apps-v2`](https://github.com/flyboy-byte/riscv-pico/releases/tag/apps-v2) and inject them with
 `debugfs -w` if you want them too; the exact recipe is in PLAN.md's "apps/" section.)
 
 One thing worth knowing: **these disk images won't boot under stock `mini-rv32ima`.** This
-project's emulator core has custom block-device and console CSRs that the stock upstream doesn't
+project's emulator core has custom block-device and console CSRs the stock upstream doesn't
 implement, so `harness/build.sh` builds this repo's own desktop copy of the *real* core instead.
 More on why in [CLAUDE.md](CLAUDE.md).
 
@@ -78,20 +104,26 @@ More on why in [CLAUDE.md](CLAUDE.md).
 
 All three `upstream/` paths are `git subtree`s with full history, so `git log -- upstream/<x>`
 works and upstream changes can still be pulled in — exact commands in [CLAUDE.md](CLAUDE.md).
-Everything here ultimately descends from [CNLohr's mini-rv32ima](https://github.com/cnlohr/mini-rv32ima).
 
 ## Writing and running your own programs
 
-There's a real, working cross-compiler for this target
-(`riscv32-buildroot-linux-uclibc-gcc`, producing the `bFLT` no-MMU binary format the kernel
-actually needs). `apps/` has working examples to copy from — a Tiny BASIC interpreter (`basic.c`),
-a GPIO chardev smoke test (`gpiotest.c`), `sysinfo.sh`. Real Lua 5.4.7 and GNU nano 7.2 are built
-the exact same way, straight from their unmodified upstream sources — they're not vendored into
-this repo. The toolchain itself isn't checked in (it's a full buildroot build, doesn't belong in
-git) — the rebuild recipe, including a few real gotchas already solved so you don't have to
-re-discover them, is in PLAN.md's "Cross-compile toolchain" and "Real GNU nano" sections.
+There's a real, working cross-compiler for this target (`riscv32-buildroot-linux-uclibc-gcc`,
+producing the `bFLT` no-MMU binary format the kernel needs). `apps/` has working examples to copy
+from — a Tiny BASIC interpreter (`basic.c`), a GPIO chardev smoke test (`gpiotest.c`),
+`sysinfo.sh`. Real Lua 5.4.7 and GNU nano 7.2 are built the exact same way, straight from their
+unmodified upstream sources — not vendored into this repo. The toolchain itself isn't checked in
+(it's a full buildroot build, doesn't belong in git) — the rebuild recipe, including a few real
+gotchas already solved so you don't have to re-discover them, is in PLAN.md's "Cross-compile
+toolchain" and "Real GNU nano" sections.
 
-## Building the firmware for real hardware
+## Firmware — prebuilt or build your own
+
+**Just want to flash something?** Grab
+[`pico-rv32ima-boards-v5`](https://github.com/flyboy-byte/riscv-pico/releases/tag/pico-rv32ima-boards-v5)
+— prebuilt `.uf2` for all four board variants, current, ready to flash. Full release list further
+down if you want an older or different build.
+
+To build it yourself instead:
 
 ```sh
 # once — Pico SDK, shallow clone with just the tinyusb submodule (~65 MB)
@@ -108,14 +140,19 @@ mounts as a USB drive called `RPI-RP2` — then copy the `.uf2` onto it. `pico-r
 above); `pico-linux` wants a single `Image` file, already shipped at
 `upstream/pico-linux/linux/Image`.
 
+**Only the original `pico` (RP2040) has been tested on real hardware.** `pico2`/`pico2_w` build
+clean and should work in principle (same emulator core, same everything but the chip), but nobody's
+actually plugged one in and checked yet.
+
 ### Parts you'll need
 
 Everything below is what's actually on the verified build — roughly **$20** total, no minimum
-order quantities, all single-quantity friendly. Prices are as of 2026-08 and will drift.
+order quantities, all single-quantity friendly. Prices will drift over time, this isn't a live
+price feed.
 
 | Part | Qty | Notes |
 | --- | --- | --- |
-| Raspberry Pi Pico | 1 | Any variant. Verified on a Pico H (RP2040); firmware also builds for `pico_w`, `pico2`, `pico2_w`. |
+| Raspberry Pi Pico | 1 | Any variant. Verified on a Pico H (RP2040); firmware also builds for `pico_w`, `pico2`, `pico2_w` (untested on real `pico2` hardware so far). |
 | **APS6404L-3SQR-SN** PSRAM, SOP-8 | 2 | 8 MB each → 16 MB. Sold as [8MB PSRAM at ProtoSupplies](https://protosupplies.com/product/psram/) (~$2.39 ea, single quantity). |
 | [SMD→DIP 8-pin adapter, 5-pack](https://protosupplies.com/product/pcb-smd-soic-8-msop-8-tssop-8-to-dip-adapter5-pack/) | 1 pack | ~$0.79. Headers not included. The chips are surface-mount; these put them on 0.1" pitch for breadboarding. |
 | microSD breakout, SPI | 1 | Any 3.3V module labelled `3V3 CS MOSI CLK MISO GND`. |
@@ -123,6 +160,7 @@ order quantities, all single-quantity friendly. Prices are as of 2026-08 and wil
 | 10 kΩ resistor | 1 | Pull-up for `SIO2`/`SIO3` on both chips — one resistor covers all four pins. |
 | SSD1306 OLED, 128×64, **I2C** (4-pin) | 0–1 | Optional status panel. Must be the I2C variant, not SPI. |
 | Breadboard + jumper wires | — | |
+| A handful of decoupling caps (100nF ceramic, 10–100µF electrolytic) | a few | Cheap insurance against the exact signal-integrity problem described below. Not strictly required to boot, but you'll probably want them. |
 
 **Get the `-SN` (SOP-8) suffix, not `-ZR`.** Same die, but `-ZR` is USON-8 — a 3×2 mm leadless
 package that's far harder to hand-solder, probe, or rework. Plain `APS6404L-3SQR` with no suffix is
@@ -136,7 +174,7 @@ or [Octopart](https://octopart.com/search?q=APS6404L-3SQR-SN).
 No level shifter needed anywhere — every part here is 3.3V-native and runs off the Pico's own 3V3
 rail.
 
-### Wiring (verified working, 2026-08-27)
+### Wiring
 
 Console is USB-CDC — no extra adapter needed. Everything's 3.3V-native, so no level shifting
 anywhere.
@@ -172,10 +210,20 @@ is the easiest mistake to make on the whole board.
 **The default build is two-chip / 16 MB** (`PSRAM_TWO_CHIPS 1` in `hw_config.h`,
 `EMULATOR_RAM_MB 16` in `vm_config.h`). Going single-chip? Set both back to `0` and `8` —
 mismatching them is a compile-time `#error`, not a silent address-wrap bug that'll bite you later.
-`PSRAM_SPI_SPEED_MHZ` defaults to 20, which stays stable even on janky flying leads.
+`PSRAM_SPI_SPEED_MHZ` defaults to 20, which stays stable even on janky breadboard flying leads.
 
-**SSD1306 status panel** (optional, 128×64 I2C OLED — hardware-verified 2026-08-29). Four separate
-jumpers; there's no free adjacent GPIO pair left on the board for it:
+**A real signal-integrity bug worth knowing about, if you're on a breadboard:** wiring up the OLED
+panel destabilized the PSRAM bus and crashed boot, even though the two share no GPIO pins. Root
+cause turned out to be a single shared 3V3 supply pin feeding PSRAM VCC, both chips' pull-ups, the
+SD card, *and* the OLED all at once — any load spike on that one node bled into everything else on
+it. Fix was a single-point (star) ground/power layout: separate power for the OLED/SD, PSRAM on
+its own clean VCC/GND, short jumpers everywhere, decoupling caps at each chip's supply pins. If
+you're seeing random resets or PSRAM failures only when a second peripheral is wired up, check
+your power distribution before you suspect the chip. Full writeup, including the wrong theories
+tried first, is in [PLAN.md](PLAN.md) and [docs/HARDWARE_SCHEMATIC.md](docs/HARDWARE_SCHEMATIC.md).
+
+**SSD1306 status panel** (optional, 128×64 I2C OLED, hardware-verified). Four separate jumpers;
+there's no free adjacent GPIO pair left on the board for it:
 
 | Module | Pico |
 | --- | --- |
@@ -219,5 +267,4 @@ Grab whichever you need, or build your own — see `apps/`, `firmware/build.sh`,
 
 This repo's own code (`harness/`, `apps/`, `firmware/`, docs) is MIT — see [LICENSE](LICENSE).
 Everything under `upstream/` keeps its original licensing — MIT / Apache-2.0 / BSD-3, see the
-`LICENSE` file in each subtree. Credit to tvlad1234, ElectroBoy404NotFound, CNLohr, and
-xhackerustc, whose work this whole thing stands on.
+`LICENSE` file in each subtree.
