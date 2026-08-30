@@ -25,15 +25,16 @@ Go star their repos, not this one.
 
 ## What this actually is
 
-A $4 microcontroller has no business running Linux. It has no MMU, no real RAM to speak of, and
-was never meant to run an OS. This project makes it happen anyway: the RP2040 software-emulates a
-full RV32IMA CPU, two SPI PSRAM chips stand in for system memory, and an SD card holds the kernel
-and root filesystem.
+A Raspberry Pi Pico has no MMU and no real RAM — it was never meant to run Linux. This project
+does it anyway: the RP2040 software-emulates a full RV32IMA CPU, two SPI PSRAM chips stand in for
+system memory, and an SD card holds the kernel and root filesystem. On top of that, the emulated
+Linux guest can talk to real hardware — real GPIO pins, a real GPIO driver, a real block device —
+through custom CSRs the emulator translates back to the RP2040.
 
-It works on real hardware — a Pico H with 16 MB of PSRAM and an SD card boots to a shell, runs GNU
-nano and Lua, and drives real GPIO pins from a shell script. If you don't have the hardware, you
-can still try the whole thing on your own machine first — a desktop build of the *real* emulator
-core boots the same kernel to a shell in about a second, no Pico required.
+It works on real hardware right now: a Pico H with 16 MB of PSRAM and an SD card boots to a shell,
+runs GNU nano and Lua, and drives real GPIO pins from a shell script. No hardware yet? You can
+still try the whole thing on your own machine — a desktop build of the *real* emulator core boots
+the same kernel to a shell in about a second, no Pico required.
 
 ## What it actually does
 
@@ -48,9 +49,10 @@ core boots the same kernel to a shell in about a second, no Pico required.
 - **Real software actually running on it.** A working cross-compiler built Tiny BASIC, real Lua
   5.4.7, and real GNU nano 7.2 (full-screen editing included) for this target, and all three run
   on the guest. `curl`'s in there too, mostly to prove the networking stack isn't fake.
-- **An SSD1306 OLED status bar, hardware-verified.** Shows RAM config, boot stage, live MIPS,
-  uptime — runs alongside PSRAM with no shared-power interference (that took a real bug hunt, see
-  the wiring notes below).
+- **A little SSD1306 OLED visualizer, hardware-verified.** Not a serious feature, just kind of a
+  cool one — shows RAM config, boot stage, live MIPS, uptime while the thing runs. Runs alongside
+  PSRAM with no shared-power interference now (that took a real bug hunt, see the wiring notes
+  below).
 - **Custom kernel drivers, not hacks bolted on top.** The block device, GPIO, and second console
   channel are all real Linux drivers talking through custom CSRs to the emulator — Linux sees
   standard devices, the RP2040 does the translating.
@@ -59,6 +61,9 @@ core boots the same kernel to a shell in about a second, no Pico required.
 - **Firmware builds clean for all four Pico variants** — `pico`, `pico_w`, `pico2`, `pico2_w` —
   though only the original `pico` (RP2040) has actually been tested on real hardware so far;
   `pico2`/`pico2_w` compile clean but are unverified.
+- **VGA + PS/2 keyboard support is already in the firmware, upstream** — it's real, working code
+  from `pico-rv32ima`, not something added here. It just hasn't been wired up and tested on *this*
+  particular build yet, so treat it as "should work" rather than "verified."
 - **Every build ships as a GitHub release**, not as binaries bloating the git history.
 
 [PLAN.md](PLAN.md) is the living state doc — every decision, every bug, what's next. This file is
