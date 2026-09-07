@@ -107,14 +107,19 @@ the signal, its shield is that color's ground. Keep them paired all the way to t
 pull-up (1k-10k, internal, unknown) is in series with any divider you add, so the high level
 collapses well below Vih — a 1.8k/3.3k divider behind a 10k pull-up idles around 1.1 V, not 3.3 V.
 
-Two options, in order:
+**Use the level converter — user already has one on hand (confirmed 2026-09-06).** No need to
+gamble on whether a given keyboard tolerates 3.3 V. Wire LV to Pico 3V3, HV to the keyboard's
+5 V, and pass CLK and DATA through two channels.
 
-1. **Try running the keyboard at 3.3 V first.** Costs nothing. Many PS/2 keyboards enumerate fine
-   at 3.3 V, and then the pull-ups are to 3.3 V and no shifting is needed at all. Two keyboards on
-   hand means two chances. Try this before buying anything.
-2. **Fall back to a BSS138 level-shifter module** — the ubiquitous 4-channel "I2C logic level
-   converter", ~$2. It is MOSFET-based and specifically correct for open-drain lines, with
-   pull-ups to each rail built in. Use 2 of its 4 channels. LV to Pico 3V3, HV to keyboard 5 V.
+Because the driver is receive-only (below), this is the easy case: **5 V -> 3.3 V, one direction,
+two channels.** Practically any converter works — a BSS138 MOSFET module is ideal for open-drain,
+but a TXS0108E or even a plain 74LVC245-style buffer is fine, since nothing ever drives back
+toward the keyboard. Confirm the module's direction/orientation before powering up; the HV and LV
+sides are not interchangeable.
+
+Running the keyboard at 3.3 V directly is still a valid fallback if the converter misbehaves —
+many PS/2 keyboards enumerate fine at 3.3 V, and then no shifting is needed at all. Two keyboards
+on hand means two chances.
 
 **The driver is receive-only** — `ps2.c:316-317` sets both pins `GPIO_IN` and never drives them
 (no `gpio_put`, no `GPIO_OUT`, anywhere in its 328 lines). Consequences:
@@ -174,7 +179,7 @@ That is by far the fastest thing on this breadboard, well above the 20 MHz PSRAM
 | VGA cable to cut | 1 | Walmart. Male DE-15, keep ~30 cm of tail |
 | 270 Ω resistors | 3 | R/G/B series. 330 Ω acceptable substitute |
 | 100 Ω resistors | 2 | Optional, HSYNC/VSYNC damping |
-| BSS138 level shifter module | 1 | **Only if 3.3 V keyboard test fails** |
+| Logic level converter | have | Confirmed on hand 2026-09-06 — nothing to buy |
 | Breadboard PSU (MB102) | have | Keyboard 5 V only |
 
 ### Order of operations on bring-up day
@@ -182,9 +187,9 @@ That is by far the fastest thing on this breadboard, well above the 20 MHz PSRAM
 1. VGA first, keyboard not connected. Console already works over USB-CDC, so a working VGA
    output is verifiable on its own with no input path.
 2. Confirm PSRAM still passes after VGA is wired — check the boot log before celebrating.
-3. Then keyboard at 3.3 V. If no keypresses, meter the idle voltage on CLK before assuming the
-   driver is broken.
-4. Only then consider the level shifter.
+3. Then the keyboard, through the level converter. If no keypresses, meter the idle voltage on
+   CLK at the Pico side before assuming the driver is broken — it should sit at 3.3 V.
+4. If the converter proves flaky, fall back to driving the keyboard at 3.3 V directly.
 
 ## Open items, prioritized
 
