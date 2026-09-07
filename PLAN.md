@@ -40,6 +40,152 @@ one, a different scale of problem than "usually works." Full writeup, working co
 honest ceiling in [`experiments/pi4-sdcard-emulator/README.md`](experiments/pi4-sdcard-emulator/README.md).
 Paused here — SD card takes over once it arrives.
 
+## VGA + PS/2 bring-up — PENDING, parts not yet in hand (2026-09-06)
+
+**Status: not started. Nothing wired, nothing tested.** User has a monitor and two PS/2 keyboards;
+still needs a VGA cable to cut up. Planned for the week of 2026-09-07. This section is the
+pre-work — pinouts and part values read out of the actual source, so bring-up day is wiring only.
+
+Both `CONSOLE_VGA` and the PS/2 driver are **real upstream code that has never been exercised
+here.** `CONSOLE_VGA 1` is already the default in `hw_config.h`. The firmware builds with it on;
+it has simply never had a display attached.
+
+### Pin assignments — from `hw_config.h`, not the README
+
+| Signal | GPIO | Pico pin | Notes |
+| --- | --- | --- | --- |
+| VGA VSYNC | 16 | 21 | `VGA_VSYNC_PIN` |
+| VGA HSYNC | 17 | 22 | `VGA_HSYNC_PIN` |
+| VGA Red | 18 | 24 | `VGA_R_PIN` |
+| VGA Green | 19 | 25 | **implicit** |
+| VGA Blue | 20 | 26 | **implicit** |
+| PS/2 DATA | 26 | 31 | `PS2_PIN_DATA` |
+| PS/2 CLK | 27 | 32 | `PS2_PIN_CK` |
+
+> Only `VGA_R_PIN` is defined. Green and Blue are **not** configurable — `rgb_program_init()`
+> (`console/vga/pio/rgb.pio.h:44-62`) takes `r_pin` as a base and hard-wires
+> `pin`, `pin+1`, `pin+2` as a 3-pin consecutive PIO group. Moving R moves G and B with it.
+> 1 bit per channel = **8 colors**, 320x240 (`vga.h`), which is 640x480@60 line-doubled.
+
+### VGA — resistor values
+
+Each color pin drives a 75 Ω terminated input that wants **0.7 V** peak. From a 3.3 V GPIO:
+
+```
+R = (3.3 x 75 / 0.7) - 75 = 279 ohm   ->  use 270 ohm (gives 0.717 V, spot on)
+                                          330 ohm also fine (0.61 V, slightly dim)
+```
+
+- **3x 270 Ω**, one in series with each of GP18/19/20. Not optional — driving 3.3 V straight
+  into a 75 Ω input is out of spec and can damage the monitor input.
+- **HSYNC/VSYNC need no divider.** They are TTL-level digital and monitors accept 3.3 V. An
+  optional 100 Ω series resistor on each damps ringing on long leads.
+- 640x480@60 wants **both sync polarities negative** — worth checking against `vga.c` timing if
+  the monitor refuses to lock.
+
+DE-15 connector (the end you keep after cutting the cable):
+
+| Pin | Signal | | Pin | Signal |
+| --- | --- | --- | --- | --- |
+| 1 | Red | | 8 | Blue GND |
+| 2 | Green | | 10 | Sync GND |
+| 3 | Blue | | 13 | HSYNC |
+| 5 | GND | | 14 | VSYNC |
+| 6 | Red GND | | | |
+| 7 | Green GND | | | |
+
+Tie pins 5/6/7/8/10 all to Pico GND. In the cable each color is a mini-coax — center conductor is
+the signal, its shield is that color's ground. Keep them paired all the way to the board.
+
+### PS/2 — the 5 V problem
+
+> **PS/2 is a 5 V bus and RP2040 GPIOs are NOT 5 V tolerant.** CLK and DATA are open-collector,
+> idling high at 5 V through the keyboard's internal pull-up. Wiring one straight to GP26/GP27
+> damages the pad. This is the single thing that must not be gotten wrong.
+
+**A plain resistor divider does not work here** and is the trap to avoid. The keyboard's own
+pull-up (1k-10k, internal, unknown) is in series with any divider you add, so the high level
+collapses well below Vih — a 1.8k/3.3k divider behind a 10k pull-up idles around 1.1 V, not 3.3 V.
+
+Two options, in order:
+
+1. **Try running the keyboard at 3.3 V first.** Costs nothing. Many PS/2 keyboards enumerate fine
+   at 3.3 V, and then the pull-ups are to 3.3 V and no shifting is needed at all. Two keyboards on
+   hand means two chances. Try this before buying anything.
+2. **Fall back to a BSS138 level-shifter module** — the ubiquitous 4-channel "I2C logic level
+   converter", ~$2. It is MOSFET-based and specifically correct for open-drain lines, with
+   pull-ups to each rail built in. Use 2 of its 4 channels. LV to Pico 3V3, HV to keyboard 5 V.
+
+**The driver is receive-only** — `ps2.c:316-317` sets both pins `GPIO_IN` and never drives them
+(no `gpio_put`, no `GPIO_OUT`, anywhere in its 328 lines). Consequences:
+- No bidirectional shifting strictly required for function, but the *line* is still open-collector
+  at 5 V, so option 2 above is still the right part if 3.3 V fails.
+- **Caps/Num Lock LEDs will never light** — that needs host-to-keyboard commands.
+- No host-initiated reset; the keyboard's power-on BAT is all you get.
+
+Mini-DIN-6 pinout, looking into the **female socket** on the keyboard cable's mating end:
+
+| Pin | Signal |
+| --- | --- |
+| 1 | DATA |
+| 2 | not connected |
+| 3 | GND |
+| 4 | +5 V |
+| 5 | CLK |
+| 6 | not connected |
+
+Pins 2 and 6 are unused — verify with a meter rather than trusting wire colors, which are not
+standardized between keyboards.
+
+### Power — use a separate supply, not Pico 3V3
+
+**This board has already been bitten once by exactly this.** The OLED-destabilises-PSRAM bug
+(resolved 2026-08-29) was a shared 3V3 node browning out under load. Do not repeat it.
+
+- **Keyboard 5 V: breadboard supply (MB102) or VBUS, but NOT sharing the PSRAM rail.** A PS/2
+  keyboard pulls 50-300 mA with real inrush at power-on. The RP2040 here is overvolted to
+  `VREG_VOLTAGE_MAX` and overclocked to 400 MHz, and PSRAM is the first thing to fall over when
+  the rail sags.
+- **Single-point ground tie** back to the Pico — the same fix that resolved the OLED bug. One tie,
+  at the Pico, not a ground loop through the breadboard rails.
+- MB102 supplies are LM1117-based, noisy, and good for ~700 mA. Fine for a keyboard. **Never move
+  PSRAM onto it.**
+- VGA itself draws no power — it is three signal lines and a ground.
+
+### Noise — this is a 62.5 MHz signal on flying leads
+
+PIO clock is `SYS_FREQ / 62500.0` at 400 MHz sys = **62.5 MHz** pixel clock (`rgb.pio.h:56`).
+That is by far the fastest thing on this breadboard, well above the 20 MHz PSRAM bus.
+
+- **Shortest possible leads on R/G/B and both syncs** — under ~15 cm. This matters more than any
+  other single choice.
+- Keep the VGA leads physically away from the PSRAM SPI runs (GP10-14). PSRAM is already the
+  fragile subsystem and is at 20 MHz specifically because of breadboard signal integrity.
+- Series resistors go **at the Pico end**, not the connector end — they damp reflections best
+  closest to the driver.
+- If PSRAM starts failing its JEDEC ID check (`initPSRAM()` returning -1/-2) after adding VGA,
+  that is a noise/power problem, not a dead chip. Same diagnostic as before: drop
+  `PSRAM_SPI_SPEED_MHZ` and see if it comes back.
+
+### Shopping list
+
+| Item | Qty | Note |
+| --- | --- | --- |
+| VGA cable to cut | 1 | Walmart. Male DE-15, keep ~30 cm of tail |
+| 270 Ω resistors | 3 | R/G/B series. 330 Ω acceptable substitute |
+| 100 Ω resistors | 2 | Optional, HSYNC/VSYNC damping |
+| BSS138 level shifter module | 1 | **Only if 3.3 V keyboard test fails** |
+| Breadboard PSU (MB102) | have | Keyboard 5 V only |
+
+### Order of operations on bring-up day
+
+1. VGA first, keyboard not connected. Console already works over USB-CDC, so a working VGA
+   output is verifiable on its own with no input path.
+2. Confirm PSRAM still passes after VGA is wired — check the boot log before celebrating.
+3. Then keyboard at 3.3 V. If no keypresses, meter the idle voltage on CLK before assuming the
+   driver is broken.
+4. Only then consider the level shifter.
+
 ## Open items, prioritized
 
 1. **SLIP guest↔host bridge, Phase 1 — half-working, one real bug found and NOT fixed. Read the
