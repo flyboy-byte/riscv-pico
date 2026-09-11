@@ -231,24 +231,84 @@ That is by far the fastest thing on this breadboard, well above the 20 MHz PSRAM
   that is a noise/power problem, not a dead chip. Same diagnostic as before: drop
   `PSRAM_SPI_SPEED_MHZ` and see if it comes back.
 
+### VGA coexists with the OLED panel — already proven, no new code (2026-09-11)
+
+**Both have been running together on this board for weeks.** `CONSOLE_VGA` has been enabled since
+`boards-v4`, and `main.c`'s core-0 loop already calls `console_task()` and `status_panel_task()`
+back to back. `console_task()` is what contains `terminal_task()`. So the VGA PIO program and its
+two DMA channels have been live and driving GP18/19/20 into open air this whole time. **Attaching
+the cable turns on no new code path.**
+
+Nothing contends, either:
+
+| | VGA | OLED status panel |
+| --- | --- | --- |
+| Pins | GP16-20 | GP21, GP28 |
+| PIO | `pio1` (`vga.c:73`) | none |
+| DMA | 2x `dma_claim_unused_channel` (`vga.c:274,277`) | none |
+| Bus | — | hardware `i2c0` |
+
+PS/2 sits on GP26/27, disjoint from both.
+
+**Keep the OLED on during VGA bring-up.** If the monitor won't lock, the panel still shows the
+machine is alive, which separates "VGA is broken" from "everything is broken". That is worth more
+than the pins it costs.
+
+### Breakout construction — perfboard, one connection point
+
+The PS/2 cable was terminated on a scrap of perfboard with jumper wires soldered to it
+(2026-09-11). Slightly clunky, worked well, and it reduces the cable to a single mechanical
+connection. **Do the same for VGA**, with three changes that matter more on this cable:
+
+- **Strain relief is not optional.** A VGA cable has real mass and will lever pads off the board.
+  Zip-tie or hot-glue the jacket where it enters the perfboard so strain lands on the board, not
+  on solder joints.
+- **Run a ground bus down one side and land every shield on it.** The DE-15 has five ground pins
+  (5,6,7,8,10), and inside the cable each colour is its own mini-coax whose shield is that
+  colour's return. Keep each centre conductor paired with its own shield as far as possible —
+  that pairing does more for noise than anything else here, and it costs nothing as long as the
+  pairs aren't unravelled early.
+- **Do NOT put the series resistors on the perfboard.** They belong on the breadboard in the row
+  immediately beside GP18/19/20 — see "Noise" above. At the cable end, the entire jumper run
+  between Pico and perfboard is undamped and radiating, and that is the exact segment closest to
+  the PSRAM lines.
+
+At ~15 cm the run is electrically short, so reflections are not the real threat; **crosstalk is**,
+and resistor placement is what governs it.
+
+Upgrade over the keyboard version: solder a row of male header pins along one edge so the board
+seats into the breadboard as a module instead of trailing flying leads. Label it while the wire
+colours still mean something.
+
 ### Shopping list
 
 | Item | Qty | Note |
 | --- | --- | --- |
-| VGA cable to cut | 1 | Walmart. Male DE-15, keep ~30 cm of tail |
+| VGA cable to cut | have | **Found at Home Depot 2026-09-11.** Male DE-15, keep ~30 cm of tail |
 | 270 Ω resistors | 3 | R/G/B series. 330 Ω acceptable substitute |
 | 100 Ω resistors | 2 | Optional, HSYNC/VSYNC damping |
-| Logic level converter | have | Confirmed on hand 2026-09-06 — nothing to buy |
+| Logic level converter | have | Used for PS/2, confirmed working 2026-09-11 |
 | Breadboard PSU (MB102) | have | Keyboard 5 V only |
+| Perfboard scrap | have | One per cable, as a breakout |
 
-### Order of operations on bring-up day
+### Order of operations — VGA half, updated 2026-09-11
 
-1. VGA first, keyboard not connected. Console already works over USB-CDC, so a working VGA
-   output is verifiable on its own with no input path.
-2. Confirm PSRAM still passes after VGA is wired — check the boot log before celebrating.
-3. Then the keyboard, through the level converter. If no keypresses, meter the idle voltage on
-   CLK at the Pico side before assuming the driver is broken — it should sit at 3.3 V.
-4. If the converter proves flaky, fall back to driving the keyboard at 3.3 V directly.
+Steps 3 and 4 of the original plan are **done**; the keyboard works and stays wired. What remains:
+
+1. Build the perfboard breakout, resistors left off it.
+2. Wire R/G/B through their 270 Ω resistors at the Pico end, then both syncs. Everything on
+   **one breadboard** to begin with — the second board is the fallback, not the starting point.
+3. Boot and **read the log before looking at the monitor.** If `initPSRAM()` reports -1/-2, VGA has
+   upset the PSRAM bus; that is the decision point for splitting onto the second breadboard or
+   dropping `PSRAM_SPI_SPEED_MHZ`.
+4. Then check for lock. If the monitor refuses to sync, the OLED panel is still telling you the
+   machine is alive — check sync polarity against `vga.c` before suspecting the wiring.
+
+**Why one breadboard is worth attempting.** Only the three colour lines run at 62.5 MHz, and those
+are exactly the lines getting a series resistor into a 75 Ω terminated input, which is a
+well-damped line rather than a ringing stub. The syncs are unterminated but run at 31 kHz and
+60 Hz. The PS/2 clock, for comparison, is ~15 kHz and caused no trouble at all. And the failure
+mode here is loud and shows up on the first boot, so the experiment is cheap.
 
 ## Open items, prioritized
 
