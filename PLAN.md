@@ -42,9 +42,23 @@ Paused here — SD card takes over once it arrives.
 
 ## VGA + PS/2 bring-up — PENDING, parts not yet in hand (2026-09-06)
 
-**Status: not started. Nothing wired, nothing tested.** User has a monitor and two PS/2 keyboards;
-still needs a VGA cable to cut up. Planned for the week of 2026-09-07. This section is the
-pre-work — pinouts and part values read out of the actual source, so bring-up day is wiring only.
+**Status: PS/2 is proceeding first; VGA is blocked on parts.** No VGA cable available locally as
+of 2026-09-11, so the display half is parked. The keyboard half is not blocked and is being wired
+now — cable identified, nothing powered yet. This section is the pre-work: pinouts and part values
+read out of the actual source, so bring-up day is wiring only.
+
+**PS/2 works with no monitor and no code change.** The driver lives inside `#if CONSOLE_VGA`,
+which is already the default in `hw_config.h` — `terminal_init()` calls `PS2_init()` and
+`terminal_task()` calls `handlePs2Keyboard()`, both of which run whether or not a display is
+attached. Decoded keys go into `kb_queue`, the *same* queue the USB-CDC console feeds, and
+`hal/hal_console.h` is what the emulator reads. So keystrokes reach guest Linux and you watch the
+output over USB serial. VGA can be wired later without revisiting any of this.
+
+> **`PS2_init()` enables the internal pull-*down* on both pins** — `ps2.c`, `gpio_set_pulls(pin,
+> false, true)`. On an open-collector bus that idles high that is backwards. It survives because
+> any external pull-up is far stronger, but it eats noise margin. If the keyboard reads flaky,
+> a push-pull buffer (74LVC245-style) beats a BSS138 module here: it drives the line hard and the
+> pull-down stops mattering. Clearing the pull-down is the other fix.
 
 Both `CONSOLE_VGA` and the PS/2 driver are **real upstream code that has never been exercised
 here.** `CONSOLE_VGA 1` is already the default in `hw_config.h`. The firmware builds with it on;
@@ -128,19 +142,45 @@ on hand means two chances.
 - **Caps/Num Lock LEDs will never light** — that needs host-to-keyboard commands.
 - No host-initiated reset; the keyboard's power-on BAT is all you get.
 
-Mini-DIN-6 pinout, looking into the **female socket** on the keyboard cable's mating end:
+Mini-DIN-6 pinout, and the wire colours **verified on the keyboard in hand (2026-09-11)**:
 
-| Pin | Signal |
-| --- | --- |
-| 1 | DATA |
-| 2 | not connected |
-| 3 | GND |
-| 4 | +5 V |
-| 5 | CLK |
-| 6 | not connected |
+| Pin | Signal | Wire |
+| --- | --- | --- |
+| 1 | DATA | red |
+| 2 | not connected | — |
+| 3 | GND | grey |
+| 4 | +5 V | brown |
+| 5 | CLK | yellow |
+| 6 | not connected | — |
 
-Pins 2 and 6 are unused — verify with a meter rather than trusting wire colors, which are not
-standardized between keyboards.
+Probed with a meter from the **front face of the male plug**, against a diagram drawn in that same
+view. Colours are not standardized between keyboards; this map is for *this* cable only, and note
+it is an unusual one — red is DATA here, not power.
+
+> **The orientation check that makes this trustworthy: pins 2 and 6 read as dead, and they are
+> both on the right-hand side of the male face.** Male-plug-front and female-socket-front diagrams
+> are mirror images of each other, and reading the wrong one swaps 3 with 4 — i.e. ground with
+> +5 V, the one error that damages hardware. But a mirrored reading would also put the two dead
+> pins on the *left*, where DATA and CLK belong. Dead pins landing on 2 and 6 is only possible in
+> the correct orientation, so it rules out the mirror and the power swap in one observation.
+> Use this check on the second keyboard too.
+
+**Shield: braid only, and only at the Pico end.** The cable's braid and foil both ohm to the plug
+shell, so the shell is shield, not signal ground — signal ground is the grey wire. Decision
+(2026-09-11): tie the **braid** to Pico GND and leave the foil shield unused. One end only; tying
+both ends makes a ground loop.
+
+### Next test — power the keyboard alone, before the Pico is anywhere near it
+
+Not yet done. Supply on brown (+5 V) and grey (GND), nothing else connected:
+
+- about 5 V across brown and grey
+- roughly 5 V on both red and yellow measured to grey — these idle high through the keyboard's
+  internal pull-ups, so a line sitting low means a broken conductor or a cold joint
+- LEDs flash once at power-on — that is the keyboard's own BAT self-test, no host needed
+
+This catches a bad crimp or a dead keyboard while the cost is still zero. Only after it passes
+does anything connect to GP26/GP27.
 
 ### Power — use a separate supply, not Pico 3V3
 
