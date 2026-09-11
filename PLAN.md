@@ -40,12 +40,31 @@ one, a different scale of problem than "usually works." Full writeup, working co
 honest ceiling in [`experiments/pi4-sdcard-emulator/README.md`](experiments/pi4-sdcard-emulator/README.md).
 Paused here — SD card takes over once it arrives.
 
-## VGA + PS/2 bring-up — PENDING, parts not yet in hand (2026-09-06)
+## PS/2 keyboard — WORKING ON HARDWARE (2026-09-11). VGA still blocked on a cable
 
-**Status: PS/2 is proceeding first; VGA is blocked on parts.** No VGA cable available locally as
-of 2026-09-11, so the display half is parked. The keyboard half is not blocked and is being wired
-now — cable identified, nothing powered yet. This section is the pre-work: pinouts and part values
-read out of the actual source, so bring-up day is wiring only.
+**Status: the PS/2 keyboard works, verified on real hardware 2026-09-11.** Typed into GNU nano
+running in guest Linux over the keyboard, with output on the USB serial console. First real
+keyboard input to the emulated machine. VGA is still parked — no cable available locally.
+
+How it was brought up, in the order that worked:
+
+1. Wire colours identified with a meter against a male-face diagram (map below), then the
+   orientation cross-check on the dead pins.
+2. **Keyboard powered alone**, nothing else connected. LEDs all lit and went out, self-test passed.
+   Both signal lines idled at 4.7 V to ground, confirming the pull-ups and every conductor.
+3. **Level converter wired with the Pico still disconnected**, then both low-voltage outputs
+   metered at 3.2 V. This is the measurement that protects GP26/GP27 and it is worth repeating on
+   any future rebuild.
+4. Only then LV1 to GP26, LV2 to GP27, firmware flashed, keyboard supply up before the Pico.
+
+No firmware change was needed at any point. The BSS138 module worked as-is despite the backwards
+internal pull-down noted below, and no noise problems showed up.
+
+> **Snag that cost time and was not a hardware fault:** the Pico enumerated in BOOTSEL
+> (`2e8a:0003` on the USB bus) but no drive appeared, because a pacman update had removed the
+> running kernel's module tree, so `usb_storage` could not load. `lsusb` showing the device while
+> `lsblk` shows nothing means check `uname -r` against `/lib/modules/` before suspecting the board.
+> A reboot fixed it.
 
 **PS/2 works with no monitor and no code change.** The driver lives inside `#if CONSOLE_VGA`,
 which is already the default in `hw_config.h` — `terminal_init()` calls `PS2_init()` and
@@ -1404,10 +1423,11 @@ custom CSR → RISC-V emulator → RP2040 GPIO → real LED, working end to end.
 
 What's left to actually finish the GPIO milestone (in progress):
 
-1. **`libgpiod` (`gpioinfo`/`gpioget`/`gpioset`) into the buildroot image** —
-   `BR2_PACKAGE_LIBGPIOD=y` + `BR2_PACKAGE_LIBGPIOD_TOOLS=y` set in
-   `~/.riscv-pico-scratch/repo/buildroot/.config`, rootfs rebuild kicked off. Once done: no more
-   custom C program needed for every GPIO experiment.
+1. ~~**`libgpiod` (`gpioinfo`/`gpioget`/`gpioset`) into the buildroot image**~~ — **DONE
+   2026-08-30**, shipped in
+   [`kernel-gpio-v2`](https://github.com/flyboy-byte/riscv-pico/releases/tag/kernel-gpio-v2).
+   `BR2_PACKAGE_LIBGPIOD=y` + `BR2_PACKAGE_LIBGPIOD_TOOLS=y` in
+   `~/.riscv-pico-scratch/repo/buildroot/.config`. No more custom C program per GPIO experiment.
 2. **`apps/basic.c` GOSUB bug fixed** (found live while testing on hardware, 2026-08-29): `do_gosub`
    pushed the GOSUB line's own index onto the return stack instead of `pc + 1` (inconsistent with
    `do_for`'s `return_line = pc + 1`), so `RETURN` landed back on the `GOSUB` statement itself
