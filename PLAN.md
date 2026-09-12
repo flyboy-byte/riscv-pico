@@ -40,7 +40,7 @@ one, a different scale of problem than "usually works." Full writeup, working co
 honest ceiling in [`experiments/pi4-sdcard-emulator/README.md`](experiments/pi4-sdcard-emulator/README.md).
 Paused here — SD card takes over once it arrives.
 
-## PS/2 keyboard — WORKING ON HARDWARE (2026-09-11). VGA still blocked on a cable
+## Console bring-up — PS/2 WORKING (2026-09-11), VGA waiting on a breakout board
 
 **Status: the PS/2 keyboard works, verified on real hardware 2026-09-11.** Typed into GNU nano
 running in guest Linux over the keyboard, with output on the USB serial console. First real
@@ -100,6 +100,42 @@ it has simply never had a display attached.
 > `pin`, `pin+1`, `pin+2` as a 3-pin consecutive PIO group. Moving R moves G and B with it.
 > 1 bit per channel = **8 colors**, 320x240 (`vga.h`), which is 640x480@60 line-doubled.
 
+### VGA wiring — buy the breakout, don't cut a cable (decided 2026-09-12)
+
+**A Serial Wombat PCB_024 VGA breakout board was ordered 2026-09-12, expected ~2026-09-14.**
+Passive board, no active electronics: a DE-15 connector on one end, labelled headers for R/G/B,
+HSYNC and VSYNC on the other, **with the series resistors already fitted** and values selectable
+for 3.3 V or 5 V input. Plug an ordinary VGA cable into it; five jumpers plus ground to the Pico.
+
+This was the user's call and it is the right one. It deletes the four riskiest/most tedious steps
+outright:
+
+| Problem | Status with PCB_024 |
+| --- | --- |
+| Cutting and identifying an 11-conductor cable | gone — a normal cable plugs in |
+| Nine-probe continuity mapping, unstandardised colours | gone — headers are labelled |
+| Male-face vs female-socket mirror trap | gone |
+| Nowhere on the breadboard to mount a series resistor | gone — resistors are on the board |
+
+That last one was a **real objection raised by the user and I had no good answer for it.** A series
+element needs two breadboard rows and the Pico's own pins already own every row it touches. The
+workaround was an inline resistor soldered into the jumper (one lead trimmed to plug into the
+breadboard, the other soldered to the wire, heatshrunk). Keep that trick in mind for other
+projects, but it is moot here.
+
+**Independent corroboration of the resistor values:** Serial Wombat's own VGA documentation
+specifies **100 Ω on the syncs and 280 Ω on R/G/B**. The values computed below from the
+0.7 V-into-75 Ω spec are 279 Ω and 100 Ω. Agreement from a completely separate source, so the
+numbers in this section are right and the board's fitted resistors will behave the same way.
+
+Everything in this section still applies **except** the cable-identification material, which is now
+the fallback path, kept in case the board disappoints or a second display is wanted. Still live:
+the Pico pin map, G and B following R as a consecutive PIO group, routing the bundle away from the
+PSRAM edge, and reading the boot log for the PSRAM check before looking at the monitor.
+
+There is also a **bench card artifact** for this — pin map, connector face, board-routing diagram
+and bring-up order: <https://claude.ai/code/artifact/01a3d4bb-6213-4bdd-8207-a2de20747524>
+
 ### VGA — resistor values
 
 Each color pin drives a 75 Ω terminated input that wants **0.7 V** peak. From a 3.3 V GPIO:
@@ -116,7 +152,8 @@ R = (3.3 x 75 / 0.7) - 75 = 279 ohm   ->  use 270 ohm (gives 0.717 V, spot on)
 - 640x480@60 wants **both sync polarities negative** — worth checking against `vga.c` timing if
   the monitor refuses to lock.
 
-DE-15 connector (the end you keep after cutting the cable):
+DE-15 connector — **FALLBACK PATH ONLY** now that the PCB_024 is ordered. Kept for the case where
+the board disappoints, or a second cable is wanted later:
 
 | Pin | Signal | | Pin | Signal |
 | --- | --- | --- | --- | --- |
@@ -284,25 +321,31 @@ colours still mean something.
 
 | Item | Qty | Note |
 | --- | --- | --- |
-| VGA cable to cut | have | **Found at Home Depot 2026-09-11.** Male DE-15, keep ~30 cm of tail |
-| 270 Ω resistors | 3 | R/G/B series. 330 Ω acceptable substitute |
-| 100 Ω resistors | 2 | Optional, HSYNC/VSYNC damping |
+| Serial Wombat PCB_024 VGA breakout | ordered | **Bought 2026-09-12, ETA ~2026-09-14.** Resistors fitted |
+| VGA cable | have | Home Depot 2026-09-11. Now plugs in whole — no longer cut |
+| 270 Ω / 100 Ω resistors | — | **Not needed.** On the breakout. Fallback path only |
 | Logic level converter | have | Used for PS/2, confirmed working 2026-09-11 |
 | Breadboard PSU (MB102) | have | Keyboard 5 V only |
-| Perfboard scrap | have | One per cable, as a breakout |
+| Perfboard scrap | have | Used for the PS/2 breakout. Not needed for VGA now |
 
-### Order of operations — VGA half, updated 2026-09-11
+### Order of operations — VGA half, rewritten for the breakout 2026-09-12
 
-Steps 3 and 4 of the original plan are **done**; the keyboard works and stays wired. What remains:
+The keyboard is done and stays wired. Waiting on the PCB_024. When it lands:
 
-1. Build the perfboard breakout, resistors left off it.
-2. Wire R/G/B through their 270 Ω resistors at the Pico end, then both syncs. Everything on
-   **one breadboard** to begin with — the second board is the fallback, not the starting point.
-3. Boot and **read the log before looking at the monitor.** If `initPSRAM()` reports -1/-2, VGA has
+1. **Check the board's voltage selection is set for 3.3 V**, not 5 V, before anything else. That is
+   the only setting on it and the Pico is a 3.3 V part.
+2. Five jumpers from the labelled headers to GP18/19/20 (R/G/B) and GP17/16 (H/VSYNC), plus ground
+   to pin 23 — which sits between HSYNC and Red in the header, so the tie is short.
+3. Keep the bundle out to the **right** edge and off the left, where PSRAM lives on GP10-14.
+   Everything on **one breadboard** to begin with; the second board is the fallback, not the
+   starting point.
+4. Boot and **read the log before looking at the monitor.** If `initPSRAM()` reports -1/-2, VGA has
    upset the PSRAM bus; that is the decision point for splitting onto the second breadboard or
-   dropping `PSRAM_SPI_SPEED_MHZ`.
-4. Then check for lock. If the monitor refuses to sync, the OLED panel is still telling you the
+   dropping `PSRAM_SPI_SPEED_MHZ`. It is a noise problem, not a dead chip.
+5. Then check for lock. If the monitor refuses to sync, the OLED panel is still telling you the
    machine is alive — check sync polarity against `vga.c` before suspecting the wiring.
+
+No firmware change at any point, same as PS/2 — see the coexistence note above.
 
 **Why one breadboard is worth attempting.** Only the three colour lines run at 62.5 MHz, and those
 are exactly the lines getting a series resistor into a 75 Ω terminated input, which is a
