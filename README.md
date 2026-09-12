@@ -19,6 +19,7 @@
 </p>
 
 <p align="center">
+  <a href="https://flyboy-byte.github.io/riscv-pico/"><b>Website</b></a> •
   <a href="#try-it-in-60-seconds-no-hardware">Try it</a> •
   <a href="#how-it-actually-works">How it works</a> •
   <a href="#build-one-yourself">Build one</a> •
@@ -191,6 +192,9 @@ everything is 3.3 V native off the Pico's own rail.
 ### Wiring
 
 Console is USB-CDC, so no serial adapter needed. Everything is 3.3 V native.
+
+The **[project website](https://flyboy-byte.github.io/riscv-pico/)** has the full 40-pin map, a
+power and ground diagram, and a [VGA wiring bench card](https://flyboy-byte.github.io/riscv-pico/vga.html).
 
 > [!WARNING]
 > **On the SD card module, `MOSI` and `CLK` cross over.** The module's header order does not match
