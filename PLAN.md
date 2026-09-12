@@ -2,8 +2,11 @@
 
 Living state document. Current reality, not a task list.
 
-**Status: booting Linux on real hardware (2026-08-27).** See the hardware milestone note below;
-the rest of this block is the software state as of 2026-08-17 and is still current.
+**Status: self-contained console coming up (reconciled 2026-09-12).** Linux boots on real hardware
+(2026-08-27), guest GPIO drives real pins (2026-08-29), and a PS/2 keyboard works (2026-09-11). VGA is
+the last piece, waiting on a breakout board due ~2026-09-14 — see "Console bring-up" directly below.
+The dated milestone notes that follow are history in order; the software block describes the state as
+of 2026-08-17 and is still accurate for what it covers.
 
 **Full cross-compile pipeline proven** — hello world, Tiny BASIC, and real GNU nano 7.2 all
 run live in the desktop harness. Nano's SIGILL crash, the read-only rootfs, and the Enter-key bug
@@ -420,7 +423,8 @@ mode here is loud and shows up on the first boot, so the experiment is cheap.
    (gitignored, matching the "binaries are GitHub releases, not git history" convention). Verified
    by actually running it for all four boards — output sizes match the earlier board-support audit
    exactly (140800/138240/131584/131584 bytes). Real hardware flashing still not attempted
-   (D-005/hardware-parked still applies) — this only builds the `.uf2`, doesn't touch a device.
+   (D-005/hardware-parked applied at the time; superseded by D-008) — this only builds the `.uf2`,
+   doesn't touch a device.
 5. **8MB RAM config no longer boots — real regression, found by the user 2026-08-17 later same
    day, fixed as "16MB only" not as "fix 8MB."** Adding `curl` pushed boot-time memory pressure high
    enough that even the shell itself now fails to spawn on 8MB (`binfmt_flat: Unable to allocate RAM
@@ -482,25 +486,40 @@ it. No hardware needed for any future PSRAM/cache/emulator-core iteration.
 
 ## Where things actually stand
 
+**Last reconciled 2026-09-12.** Several lines below date from 2026-08-15 and are annotated in place
+rather than deleted.
+
 - ✅ Pico SDK 2.1.1 at `~/pico-sdk` (shallow + tinyusb only, 65 MB). Builds clean on GCC 16.1.
-- ✅ `upstream/pico-rv32ima` builds → `build/pico-rv32ima/pico-rv32ima.uf2`, 140 KB. **Flashable now.**
+- ✅ `upstream/pico-rv32ima` builds → `build/pico-rv32ima/pico-rv32ima.uf2`, 140 KB at the time (148 KB with GPIO + OLED, 2026-09-11). **Flashed and running.**
 - ✅ Both upstreams vendored as subtrees with full history. `tiny-rv32ima` converted from submodule
   to subtree at the same path, so upstream CMake paths still work.
 - ✅ Kernel images for `pico-rv32ima` downloaded and inspected (`images.zip` v1.0, 2025-08-27:
   `Image` 2.2 MB, `dtb` 2 KB, `rootfs` 60 MB ext2).
-- ❌ Nothing flashed to hardware yet — **parked, don't pick back up without being asked.**
+- ~~❌ Nothing flashed to hardware yet — **parked, don't pick back up without being asked.**~~
+  **Superseded 2026-08-27: Linux boots on real hardware** (16 MB, SD, shell). Guest GPIO lit a real
+  LED 2026-08-29; PS/2 keyboard working 2026-09-11. D-005 is retired — see D-008.
 - ✅ Multi-chip PSRAM port — `pico-linux`'s address-based chip-select logic ported into
   `pico-rv32ima`. Compiles clean for real RP2040 target in both 1-chip and 2-chip configs; default
-  config unchanged (1 chip, 8 MB) so nothing about current hardware behavior changed. See below.
+  config unchanged (1 chip, 8 MB) at the time. **Default is now 2 chips / 16 MB**, hardware-verified
+  2026-08-27. See below.
 - ✅ Desktop harness — boots to a Linux shell, no hardware. See below.
 
 ## Hardware on hand
 
-Pico H (RP2040, 2021, has headers) · ST7735 128×160 LCD · two SPI PSRAM chips (APS6404L, 8-lead
-SOP, QSPI used in standard-SPI mode) — **both graded good individually 2026-08-25, both wired
-simultaneously and verified under load 2026-08-27** · a 5V→3.3V logic level converter (not needed
-for PSRAM/SD, both 3.3V-native — earmarked for a PS/2 keyboard later, see "Real hardware bring-up"
-below) · **14.6 GB microSD card (FAT32) + SPI breakout module — acquired and working 2026-08-27.**
+Reconciled 2026-09-12.
+
+| Part | State |
+| --- | --- |
+| Pico H (RP2040, 2021, has headers) | In use |
+| 2× SPI PSRAM (APS6404L, SOP-8 on DIP adapters) | Graded good 2026-08-25, both wired and verified under load 2026-08-27 |
+| 14.6 GB microSD (FAT32) + SPI breakout | Working since 2026-08-27 |
+| SSD1306 128×64 OLED, I²C | Running as the status panel, default-on since `boards-v4` |
+| BSS138 4-channel logic level converter | In use for PS/2 since 2026-09-11 |
+| PS/2 keyboard (two on hand), perfboard breakout | Working 2026-09-11. Wire map in "Console bring-up" |
+| MB102 breadboard supply | Powers SD, OLED and the keyboard, single-point ground tie |
+| Monitor + uncut VGA cable | On hand |
+| Serial Wombat PCB_024 VGA breakout | Ordered 2026-09-12, due ~2026-09-14 |
+| ST7735 128×160 LCD | **Unconfirmed.** Listed here 2026-08-15, but the 2026-08-27 "ST7735 port" note says it is not on hand. Never ported either way |
 
 Previous attempt (Sept 2024) got as far as installing the SDK and configuring a build, then
 stalled — the gap was not knowing what happens after wiring, not the wiring itself. That gap is now
@@ -559,9 +578,11 @@ to the vendored upstream trees — D-003's stated exception point. Split the sam
   a compile-time `#error`, not a silent address-wrap bug.
 - **Not verified and can't be from a desktop:** the real SPI chip-select GPIO behavior. That needs
   a second physically-wired, graded-good chip — hardware is parked, so this stays unverified until
-  hardware work resumes.
-- Repo currently sits back on the safe default (1 chip, 8 MB) — nothing about current wiring's
-  expected behavior changed by this port landing.
+  hardware work resumes. **→ Verified on hardware 2026-08-27:** both chips wired at once, chip 2's
+  data path proven by pigeonhole. See "First Linux boot on real hardware".
+- ~~Repo currently sits back on the safe default (1 chip, 8 MB) — nothing about current wiring's
+  expected behavior changed by this port landing.~~ Default has been 2 chips / 16 MB
+  (`PSRAM_TWO_CHIPS 1`) since `boards-v2`; 8 MB no longer boots at all (open item #5).
 
 ## Next steps, in order
 
@@ -580,9 +601,10 @@ Ordered so the risky unknowns resolve first and nothing depends on the display w
      Now superseded by a fuller plan: **see "Guest-driven status panel + image split" below**,
      which is the agreed 6-phase plan covering the guest-driven panel, the `plain` no-network
      image, the A/B firmware split and the glyph-grid refactor.
-   - **VGA + PS/2 keyboard** — **zero new code**, `CONSOLE_VGA` is already on. Needs parts ordered
-     (VGA breakout, 3× 330 Ω, PS/2 keyboard; the level shifter is already owned). This is the real
-     standalone milestone.
+   - **VGA + PS/2 keyboard** — **zero new code**, `CONSOLE_VGA` is already on. **PS/2 half DONE
+     2026-09-11.** VGA half waits on a Serial Wombat PCB_024 breakout (resistors fitted, ordered
+     2026-09-12), which replaces the "3× 330 Ω" plan. This is the real standalone milestone. Current
+     detail is in "Console bring-up" at the top of this file.
    - **ST7735 console** — needs a pin reassignment first, it is *not* a drop-in; display is not
      currently on hand.
 
@@ -622,8 +644,8 @@ First real hardware session — Pico H, both PSRAM chips, no SD card yet. Consol
   that ambiguity). Each: reflash unchanged firmware, confirm it gets past `PSRAM ERR` and instead
   fails at `Error initalizing SD` (expected — no SD card wired yet, that failure mode itself is the
   pass signal for the PSRAM step). Chip 1 confirmed good, swapped for chip 2 on the same wiring,
-  confirmed good. Not yet tested: both chips wired simultaneously (`PSRAM_TWO_CHIPS 1`, step 4
-  above).
+  confirmed good. ~~Not yet tested: both chips wired simultaneously~~ — **done 2026-08-27**
+  (`PSRAM_TWO_CHIPS 1`, step 4 above).
 - **SD card and SPI breakout module: not owned.** Need to buy — small (4–32 GB, SDHC, FAT32,
   avoid exFAT/SDXC since Petit FatFs here only understands FAT12/16/32) microSD card plus a basic
   SPI breakout module (either 3.3V-only or the common "5V-compatible" regulator/level-shifter kind,
@@ -641,6 +663,11 @@ First real hardware session — Pico H, both PSRAM chips, no SD card yet. Consol
 ### Display plans — SSD1306 status panel, and VGA+PS/2 needs no code (2026-08-27)
 
 Scoped on paper, **nothing built.** Two separate paths, complementary rather than competing.
+
+> **Update 2026-09-12:** both halves are now built or in hand. The SSD1306 panel runs on hardware
+> (default-on since `boards-v4`) and the PS/2 keyboard works (2026-09-11). VGA waits on a PCB_024
+> breakout. The 330 Ω figure below is superseded by 270–280 Ω, and the two consoles run together
+> rather than as alternatives. See "Console bring-up" at the top of this file.
 
 #### VGA + PS/2 keyboard — already in the firmware, needs parts only
 
@@ -664,10 +691,12 @@ this is the future use already flagged for it in "Real hardware bring-up".
 PS/2 adapter. Those adapters only work if the keyboard contains legacy PS/2 fallback silicon,
 which most modern keyboards dropped.
 
-#### SSD1306 128×64 OLED — status panel — **BUILT (2026-08-27), not yet run on hardware**
+#### SSD1306 128×64 OLED — status panel — **BUILT (2026-08-27), running on hardware since 2026-08-29**
 
 Written, builds clean for all four boards, boot-tested in the desktop harness (the emulator-side
-changes only). **Not yet verified against a real panel** — that's the open item.
+changes only). ~~**Not yet verified against a real panel** — that's the open item.~~ **Verified on
+a real panel**: it exposed, then survived the fix for, the shared-supply PSRAM bug (resolved
+2026-08-29), and has been default-on since `boards-v4`.
 
 | | |
 | --- | --- |
@@ -1471,14 +1500,15 @@ assuming "real Linux driver" best practice transfers unmodified. Went with CSR t
 `gpiotest` requests line 0 as output, sets it high, reads back `1`, exit 0. Full transcript is in
 this session's history if the sequence ever needs re-checking.
 
-**Pushed to real hardware too, not yet booted there.** The kernel `Image` is guest-side and
+**Pushed to real hardware too** ~~, not yet booted there~~ — **booted and verified 2026-08-29**,
+`gpiotest` lit a real LED; see "Finishing GPIO". The kernel `Image` is guest-side and
 identical whether it's running under the harness or on the Pico, so the same rebuilt `Image` and
 `gpiotest` went straight onto the real SD card's `ROOTFS` (same `debugfs -w` injection as
 `lua`/`basic`/`nano`). Firmware rebuilt for all four boards with the matching CSR handler and
 published as **`pico-rv32ima-boards-v5`**; the kernel `Image` itself published as
 **`kernel-gpio-v1`** (harness and hardware share the same guest kernel, so this is the one to grab
-either way). **Not yet flashed/booted on the physical Pico** — that's the next real-hardware step,
-whenever the board's free for it.
+either way). ~~**Not yet flashed/booted on the physical Pico** — that's the next real-hardware step,
+whenever the board's free for it.~~ Done 2026-08-29.
 
 **Found and fixed a real gap while doing this:** the kernel patch series
 (`buildroot_overlay/board/tiny-rv32ima/`) that defines every custom guest-side device — block
@@ -1494,8 +1524,12 @@ everything else (pin budget reasoning, the I2C-expander rejection) still holds:*
 
 **Pin budget, and why it's not actually the constraint it first looks like.** Current allocation:
 UART 0/1 (disabled), SD SPI 0/2/3/4, guest-facing bit-banged SPI 5/6/7/8, PSRAM SPI 10-14, VGA
-16-20 (not yet wired), PS/2 26/27 (not yet wired), OLED I2C 21/28. Free GPIOs: 1, 9, 15, 22 — plus
-21/28 too, *whenever OLED isn't the active console*, per the existing scope fence (console and
+16-20 (not yet wired; breakout due ~2026-09-14), PS/2 26/27 (wired and working 2026-09-11), OLED
+I2C 21/28. Free GPIOs: 1, 9, 15, 22 — plus
+21/28 too, *whenever OLED isn't the active console*, per the existing scope fence **[wrong — corrected 2026-09-12: no such fence is written in "Display
+plans", and `main.c`'s core-0 loop runs `console_task()` and `status_panel_task()` back to back, so
+VGA and the OLED run simultaneously. GP21/28 are never free while `CONSOLE_OLED 1`. The free list
+is 1, 9, 15, 22, and GP1 is the GPIO demo LED]** (console and
 status panel don't coexist — see "Display plans" above). VGA-as-console and OLED-as-status-panel
 are alternate configs, not simultaneous, so the actual number of free pins depends on which
 console is active at the time, not a fixed "4 forever."
@@ -1656,9 +1690,9 @@ scriptable input) but with real terminal fidelity instead of a line-append hack.
   `tiny-rv32ima` submodule pointer, which was replaced by a subtree at the same path. (2026-08-15)
 - **D-004** — Serial-first bring-up; the LCD is wired last. The previous attempt stalled partly by
   trying to bring up everything at once with no feedback until it all worked. (2026-08-15)
-- **D-005** — Real hardware work is parked indefinitely; focus is emulation-only until the user
+- ~~**D-005** — Real hardware work is parked indefinitely; focus is emulation-only until the user
   explicitly says otherwise. Don't propose flashing, chip-testing, or wiring steps unprompted.
-  (2026-08-15)
+  (2026-08-15)~~ **Superseded by D-008.**
 - **D-006** — Upstream trees are no longer pristine (D-003's exception point). The multi-chip PSRAM
   port landed directly on `upstream/pico-rv32ima` and `upstream/pico-rv32ima/tiny-rv32ima` (on
   branch `port/multi-chip-psram`). Future upstream `git subtree pull`s will need to merge through
@@ -1668,6 +1702,11 @@ scriptable input) but with real terminal fidelity instead of a line-append hack.
   `pico2_w` board targets build at all (those boards have no GPIO LED). Software-only, no
   emulator/PSRAM logic touched, `pico`/`pico2` byte-identical `.uf2` output before and after.
   (2026-08-16)
+
+- **D-008** — Supersedes D-005. Real hardware work is active and in scope as of 2026-08-27, when
+  Linux first booted on the Pico. Proposing wiring, flashing and test steps is normal work; the user
+  does the physical side. (Recorded 2026-09-12; the change itself happened 2026-08-27 and was only
+  ever captured in session memory until now.)
 
 ## Hardware readiness — theoretical audit, no hardware touched (2026-08-15)
 
@@ -1781,7 +1820,7 @@ overhead — nowhere near 8µs. **Confirmed compliant by design, not by luck.**
 Evidence tagged **DOCUMENTED** (read directly from source/SDK headers), **REPORTED** (community
 consensus, no primary source), or **INFERRED** (derived, not directly sourced) — same convention as
 the hardware-readiness audit above. No hardware exists to verify any of this; D-005 (hardware
-parked) still applies — everything below is a real `cmake --build`, not a flash.
+parked) applied at the time, since superseded by D-008, though RP2350 has still never been flashed — everything below is a real `cmake --build`, not a flash.
 
 **Update, same day, later pass: the paper scoping below held up.** All four board targets
 (`pico`, `pico_w`, `pico2`, `pico2_w`) build clean against SDK 2.1.1. The build-system claim ("just

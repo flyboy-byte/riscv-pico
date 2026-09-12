@@ -77,7 +77,8 @@ What's actually verified, versus what merely compiles. No wishful thinking in th
 | ✅ | **Desktop harness** | Boots the same kernel on your PC in ~1s. No hardware needed. |
 | ✅ | **SSD1306 OLED panel** | A live stats visualizer. Not essential, just fun. |
 | 🚧 | **`pico2` / `pico2_w` (RP2350)** | Builds clean for all four board targets. Never actually flashed. |
-| 🚧 | **VGA + PS/2 console** | Real, working code from upstream `pico-rv32ima` — just not wired up and tested here. |
+| ✅ | **PS/2 keyboard console** | Type straight into the guest with no PC in the loop for input. Verified 2026-09-11. |
+| 🚧 | **VGA display** | Code already compiled in and running. Waiting on a breakout board. |
 | 🚧 | **TCP/IP to the host** | Stack works, loopback-verified. The host bridge is half-built. |
 | ❌ | **I²C / SPI / PWM / ADC for the guest** | Documented as an idea in [PLAN.md](PLAN.md). Deliberately not built. |
 

@@ -2,10 +2,10 @@
 
 Guidance for Claude Code (claude.ai/code) working in this repository.
 
-**Status: staging (2026-08-15).** Both upstreams are vendored and buildable, and a desktop harness
-(`harness/`) boots the real `tiny-rv32ima` emulator to a Linux shell with no hardware. Nothing
-merged, ported, or flashed to hardware yet. See [PLAN.md](PLAN.md) for current state and what's
-next — that's the living document, this one is orientation.
+**Status: running on real hardware (updated 2026-09-12).** Linux boots on the Pico with 16 MB across
+two PSRAM chips, guest GPIO drives real pins, and a PS/2 keyboard works; VGA is next. The desktop
+harness (`harness/`) still boots the same kernel with no hardware. See [PLAN.md](PLAN.md) for current
+state and what's next — that's the living document, this one is orientation.
 
 ## What this repo is
 
@@ -14,8 +14,10 @@ same problem are vendored side by side so they can be compared, hacked, and even
 The intended direction (see PLAN.md) is **fork `pico-rv32ima`, port `pico-linux`'s features into
 it** — not a 50/50 merge.
 
-Hardware this is actually being built for: **Pico (RP2040)**, **ST7735 128×160 LCD**, a couple of
-hand-soldered **SPI PSRAM chips on DIP adapters** of uncertain condition, and an SD card.
+Hardware this is actually being built for: **Pico H (RP2040)**, two hand-soldered **SPI PSRAM chips
+on DIP adapters** (both graded good, 16 MB), a microSD card over SPI, an **SSD1306 OLED** status
+panel, a **PS/2 keyboard**, and a VGA display through a breakout board. The ST7735 LCD from the
+original plan was never ported.
 
 ## Layout
 

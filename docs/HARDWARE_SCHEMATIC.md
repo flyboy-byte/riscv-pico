@@ -1,5 +1,11 @@
 # Hardware schematic — handoff doc for circuit/layout review
 
+> **Status update 2026-09-12 — parts of this doc are history.** It was written before the
+> PSRAM/OLED supply bug was fixed on 2026-08-29. Since then SD and OLED moved to a separate supply
+> with a single-point ground tie, PSRAM got local decoupling, `CONSOLE_OLED` is back on by default,
+> and a PS/2 keyboard is wired and working. The incident analysis below is kept as written; the
+> component and pinout tables are corrected in place. Current state lives in PLAN.md.
+
 **Purpose of this file:** this project (`riscv-pico`, a RISC-V Linux emulator running on a Pico
 RP2040) currently runs on a solderless breadboard, and has hit a real signal-integrity problem
 that a breadboard can't solve. The plan is to move to a soldered perfboard/stripboard. This doc
@@ -31,11 +37,13 @@ running hotter/noisier than stock.
 | Raspberry Pi Pico (RP2040) | Host MCU | Core 0 = I/O, core 1 = RV32IMA emulator |
 | 2× PSRAM chip (LY68L6400 or ESP-PSRAM64H, 8 MB each) | Emulated guest RAM (16 MB total) | Hand-soldered onto DIP adapters, connected to the breadboard by flying leads. This is the **most timing-sensitive bus in the system** — see incident below. |
 | SD card breakout | Guest root filesystem storage | SPI, low activity, not implicated in any issue so far |
-| SSD1306 128×64 OLED | Status panel (currently software-disabled) | I2C, address 0x3C, 12.2 mA measured draw. **Wiring this in destabilizes the PSRAM bus — see incident below.** |
-| VGA output (not yet wired) | Primary console, PIO-generated | Needs a resistor-ladder DAC: 3× 330 Ω on R/G/B lines per the project README. Continuous, high-frequency (real VGA pixel clock, tens of MHz), not yet built. |
-| PS/2 keyboard port (not yet wired) | Console input | Low frequency (~10–16 kHz clock), driven by the keyboard, not the Pico |
+| SSD1306 128×64 OLED | Status panel (enabled by default since `boards-v4`) | I2C, address 0x3C, 12.2 mA measured draw. **Wiring this in destabilizes the PSRAM bus — see incident below.** |
+| VGA output (not yet wired — breakout board due ~2026-09-14) | Primary console, PIO-generated | Series resistors on R/G/B: 270–280 Ω for 3.3 V into 75 Ω (330 Ω was the older, dimmer figure), fitted on the Serial Wombat PCB_024 breakout. Continuous, high-frequency (real VGA pixel clock, tens of MHz), not yet built. |
+| PS/2 keyboard port (**wired and working 2026-09-11**) | Console input | Low frequency (~10–16 kHz clock), driven by the keyboard, not the Pico |
 
-Everything is currently powered from the Pico's own 3V3 regulator via USB — no external supply.
+~~Everything is currently powered from the Pico's own 3V3 regulator via USB — no external supply.~~
+**Superseded 2026-08-29:** SD and OLED run from a separate breadboard supply, ground tied to the
+Pico at one point; PSRAM stays on the Pico's rail. The PS/2 keyboard has its own 5 V supply too.
 
 **Power distribution is single-point and this matters a lot for the incident below.** Physical
 pin 36 (3V3 OUT) is the sole 3V3 source on the breadboard, and it directly feeds: the SD card's
@@ -55,9 +63,9 @@ Source of truth: `upstream/pico-rv32ima/pico-rv32ima/hw_config.h`.
 | SD card SPI (`spi0`) | CK=2, TX=3, RX=4, CS=0 | |
 | Bit-banged SPI, exposed to the **guest OS** via custom CSRs 0x180–0x183 | CS=5, SCK=6, MOSI=7, MISO=8 | Not a spare bus — the RISC-V guest can drive this directly. Looked "free" in an earlier pin audit and wasn't; don't reuse it. |
 | PSRAM SPI (`spi1`, hardware SPI) | CK=10, TX=11, RX=12, S1(chip 1 CS)=13, S2(chip 2 CS)=14 | Currently clocked at 20 MHz (dropped from a 50 MHz nominal for breadboard bring-up). **This is the bus that breaks.** |
-| VGA | VSYNC=16, HSYNC=17, R=18 (G/B implied at 19/20 by the emulator's PIO program, consecutive from `VGA_R_PIN`) | Not yet wired |
-| PS/2 keyboard | DATA=26, CLK=27 | Not yet wired |
-| I2C0 (OLED, currently disabled in firmware) | SDA=28, SCL=21 | Only free I2C-capable pair once everything else claimed its pins — RP2040 muxes i2c0 onto GPIOs where `n/2` is even, i2c1 where odd, SDA always even/SCL the odd pin above. No free *adjacent* pair existed; this needs two separate jumpers from the module. |
+| VGA | VSYNC=16, HSYNC=17, R=18 (G/B implied at 19/20 by the emulator's PIO program, consecutive from `VGA_R_PIN`) | Not yet wired — breakout due ~2026-09-14 |
+| PS/2 keyboard | DATA=26, CLK=27 | Wired 2026-09-11 through a BSS138 level converter; keyboard on its own 5 V supply |
+| I2C0 (OLED, enabled in firmware since `boards-v4`) | SDA=28, SCL=21 | Only free I2C-capable pair once everything else claimed its pins — RP2040 muxes i2c0 onto GPIOs where `n/2` is even, i2c1 where odd, SDA always even/SCL the odd pin above. No free *adjacent* pair existed; this needs two separate jumpers from the module. |
 
 Power/ground reference points already in use: GND near pin 28, 3V3(OUT) near pin 36 (physical pin
 numbers, for the OLED tap).
