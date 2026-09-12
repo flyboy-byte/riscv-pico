@@ -356,6 +356,34 @@ well-damped line rather than a ringing stub. The syncs are unterminated but run 
 60 Hz. The PS/2 clock, for comparison, is ~15 kHz and caused no trouble at all. And the failure
 mode here is loud and shows up on the first boot, so the experiment is cheap.
 
+## Project website — GitHub Pages, built 2026-09-12, not yet published
+
+`site/` holds a two-page static site: `index.html` (project overview, full 40-pin map, power and
+ground layout, CSR table, status, build log) and `vga.html` (the VGA bench card), with a shared nav.
+Plain HTML with inline CSS and SVG — no generator, no CI, no dependencies beyond Google Fonts.
+`.nojekyll` stops GitHub running Jekyll over it.
+
+**`site/` on `main` is the source of truth.** It is published by pushing that folder to a
+`gh-pages` branch, so nothing outside `site/` ever lands on the public site:
+
+```sh
+git subtree push --prefix site origin gh-pages          # publish / republish
+gh api -X POST repos/flyboy-byte/riscv-pico/pages \
+  -f 'source[branch]=gh-pages' -f 'source[path]=/'      # once, to enable Pages
+```
+
+Expected URL once enabled: <https://flyboy-byte.github.io/riscv-pico/>
+
+The same two pages also exist as private Claude artifacts, which are the review previews:
+overview <https://claude.ai/code/artifact/60afbfa9-09fa-4147-9f70-9fd64479346d>, bench card
+<https://claude.ai/code/artifact/01a3d4bb-6213-4bdd-8207-a2de20747524>. An artifact is the site page
+with the doctype/head/body wrapper and the nav bar removed, so edit `site/` first and derive the
+preview from it, not the other way round.
+
+**Pin map facts worth not re-deriving:** every RP2040 GPIO the Pico exposes is assigned. The pins
+`hw_config.h`'s comment calls free — 1, 9, 15, 22 — are the guest GPIO lines 0-3, set in
+`hal/hal_csr.h` (`gpio_csr_pins[4] = {1, 9, 15, 22}`). Line 0 is GP1, physical pin 2, the demo LED.
+
 ## Open items, prioritized
 
 1. **SLIP guest↔host bridge, Phase 1 — half-working, one real bug found and NOT fixed. Read the

@@ -1,0 +1,648 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="color-scheme" content="light dark">
+<meta name="description" content="riscv-pico: a Raspberry Pi Pico running real RISC-V Linux, with the full pin map, power layout and verified status.">
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🐧</text></svg>">
+<title>riscv-pico</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Archivo:wght@600;700&family=JetBrains+Mono:wght@400;700&family=Source+Serif+4:ital,opsz,wght@0,8..60,400;0,8..60,600;1,8..60,400&display=swap">
+
+<style>
+  :root {
+    --bg:#e9ece8;
+    --surface:#f8faf7;
+    --surface-2:#dfe4dd;
+    --ink:#191d1a;
+    --muted:#5b665e;
+    --rule:#c8d0c7;
+    --accent:#15626d;
+    --accent-soft:#d3e5e8;
+    --sig-r:#c33f2f;
+    --sig-g:#24824a;
+    --sig-b:#2558b4;
+    --warn:#8d5300;
+    --warn-soft:#f2e3cd;
+    --done:#24824a;
+    --c-ps:#98590b; --c-sd:#6b4fb2; --c-ol:#8a3d7b; --c-k:#4e791f; --c-bb:#74665a; --c-gg:#b5325d;
+
+    --f-display:"Archivo","Helvetica Neue",Arial,sans-serif;
+    --f-body:"Source Serif 4",Georgia,"Times New Roman",serif;
+    --f-mono:"JetBrains Mono",ui-monospace,"SFMono-Regular",Menlo,monospace;
+  }
+
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      --bg:#121613; --surface:#1a201c; --surface-2:#242b26;
+      --ink:#e3e8e3; --muted:#95a199; --rule:#2f3833;
+      --accent:#58bcc8; --accent-soft:#153037;
+      --sig-r:#f0705e; --sig-g:#5cc47f; --sig-b:#7ba6f2;
+      --warn:#e0a84a; --warn-soft:#332713; --done:#5cc47f;
+      --c-ps:#e3ad52; --c-sd:#ab97ea; --c-ol:#d68dc7; --c-k:#a0cf62; --c-bb:#b9a996; --c-gg:#f27ba3;
+    }
+  }
+
+  :root[data-theme="dark"] {
+    --bg:#121613; --surface:#1a201c; --surface-2:#242b26;
+    --ink:#e3e8e3; --muted:#95a199; --rule:#2f3833;
+    --accent:#58bcc8; --accent-soft:#153037;
+    --sig-r:#f0705e; --sig-g:#5cc47f; --sig-b:#7ba6f2;
+    --warn:#e0a84a; --warn-soft:#332713; --done:#5cc47f;
+      --c-ps:#e3ad52; --c-sd:#ab97ea; --c-ol:#d68dc7; --c-k:#a0cf62; --c-bb:#b9a996; --c-gg:#f27ba3;
+  }
+
+  body {
+    background: var(--bg); color: var(--ink);
+    font-family: var(--f-body); font-size: 17px; line-height: 1.6;
+    -webkit-font-smoothing: antialiased;
+  }
+
+  .wrap { max-width: 880px; margin: 0 auto; padding-inline: 20px; padding-block: 44px 80px; }
+
+  h1, h2, h3 { font-family: var(--f-display); text-wrap: balance; margin: 0; }
+  h1 { font-size: clamp(34px, 7vw, 52px); font-weight: 700; letter-spacing: -0.03em; line-height: 1.03; }
+  h2 { font-size: 13px; font-weight: 700; letter-spacing: 0.14em; text-transform: uppercase; color: var(--accent); }
+  h3 { font-size: 19px; font-weight: 600; letter-spacing: -0.01em; }
+  p { margin: 0; }
+  a { color: var(--accent); text-underline-offset: 3px; }
+
+  .eyebrow {
+    font-family: var(--f-mono); font-size: 12px; font-weight: 700;
+    letter-spacing: 0.18em; text-transform: uppercase; color: var(--muted);
+  }
+
+  header { display: flex; flex-direction: column; gap: 16px; }
+  .lede { font-size: 20px; max-width: 56ch; }
+  .sub { font-size: 16px; color: var(--muted); max-width: 62ch; }
+
+  .stats {
+    display: grid; grid-template-columns: repeat(auto-fit, minmax(126px, 1fr));
+    gap: 1px; background: var(--rule); border: 1px solid var(--rule); border-radius: 4px;
+    overflow: hidden; margin-top: 10px;
+  }
+  .stat { background: var(--surface); padding: 14px 16px; display: flex; flex-direction: column; gap: 3px; }
+  .stat .v {
+    font-family: var(--f-display); font-size: 23px; font-weight: 700; letter-spacing: -0.02em;
+    font-variant-numeric: tabular-nums; line-height: 1.1;
+  }
+  .stat .k {
+    font-family: var(--f-mono); font-size: 10.5px; letter-spacing: 0.1em;
+    text-transform: uppercase; color: var(--muted);
+  }
+
+  section { margin-top: 56px; display: flex; flex-direction: column; gap: 16px; }
+  section > p, section > ul, section > ol { max-width: 66ch; }
+
+  ul, ol { margin: 0; padding-left: 1.2em; display: flex; flex-direction: column; gap: 9px; }
+  li::marker { color: var(--muted); }
+  strong { font-weight: 600; }
+  code, .mono { font-family: var(--f-mono); font-size: 0.86em; }
+  code { background: var(--surface-2); padding: 1px 5px; border-radius: 3px; }
+
+  figure { margin: 0; display: flex; flex-direction: column; gap: 12px; }
+  .plate {
+    background: var(--surface); border: 1px solid var(--rule); border-radius: 4px;
+    padding: 18px 16px; overflow-x: auto;
+  }
+  .plate svg { display: block; margin: 0 auto; max-width: 100%; height: auto; min-width: 480px; }
+  figcaption { font-size: 14px; color: var(--muted); max-width: 66ch; }
+
+  .tbl-scroll { overflow-x: auto; }
+  table { border-collapse: collapse; width: 100%; font-size: 15px; min-width: 440px; }
+  th {
+    font-family: var(--f-mono); font-size: 11px; font-weight: 700; letter-spacing: 0.12em;
+    text-transform: uppercase; color: var(--muted); text-align: left;
+    padding: 0 14px 8px 0; border-bottom: 1px solid var(--rule); white-space: nowrap;
+  }
+  td { padding: 10px 14px 10px 0; border-bottom: 1px solid var(--rule); vertical-align: baseline; }
+  tr:last-child td { border-bottom: 0; }
+  td.num, td.mono { font-family: var(--f-mono); font-variant-numeric: tabular-nums; white-space: nowrap; font-size: 13.5px; }
+
+  .state { font-family: var(--f-mono); font-size: 11px; font-weight: 700; letter-spacing: 0.06em; white-space: nowrap; }
+  .state.ok { color: var(--done); }
+  .state.wip { color: var(--warn); }
+  .state.no { color: var(--muted); }
+
+  .note {
+    border-left: 3px solid var(--accent); background: var(--accent-soft);
+    padding: 14px 16px; border-radius: 0 4px 4px 0; font-size: 16px; max-width: 66ch;
+  }
+  .note .label {
+    display: block; font-family: var(--f-mono); font-size: 11px; font-weight: 700;
+    letter-spacing: 0.14em; text-transform: uppercase; color: var(--accent); margin-bottom: 5px;
+  }
+
+  .legend { display: flex; flex-wrap: wrap; gap: 8px 18px; }
+  .key { display: inline-flex; align-items: center; gap: 7px; font-family: var(--f-mono); font-size: 11.5px; color: var(--muted); }
+  .swatch { width: 12px; height: 12px; border-radius: 50%; flex: none; }
+
+  .log { display: flex; flex-direction: column; gap: 0; border-top: 1px solid var(--rule); }
+  .ev {
+    display: grid; grid-template-columns: 104px 1fr; gap: 18px;
+    padding: 14px 0; border-bottom: 1px solid var(--rule); align-items: baseline;
+  }
+  .ev .d {
+    font-family: var(--f-mono); font-size: 12px; color: var(--muted);
+    font-variant-numeric: tabular-nums; white-space: nowrap;
+  }
+  .ev .t { font-size: 16px; }
+  .ev .t b { font-weight: 600; }
+  .ev.peak .t b { color: var(--accent); }
+
+  @media (max-width: 560px) {
+    body { font-size: 16px; }
+    .wrap { padding-block: 30px 60px; }
+    .ev { grid-template-columns: 1fr; gap: 4px; }
+  }
+
+  footer { margin-top: 64px; padding-top: 20px; border-top: 1px solid var(--rule); display: flex; flex-direction: column; gap: 8px; }
+  footer p { font-family: var(--f-mono); font-size: 12px; color: var(--muted); }
+
+  html { -webkit-text-size-adjust: 100%; }
+  body { margin: 0; }
+  img { max-width: 100%; }
+  [hidden] { display: none !important; }
+  .sitenav { background: var(--surface); border-bottom: 1px solid var(--rule); }
+  .sitenav .in {
+    max-width: 880px; margin: 0 auto; padding-inline: 20px; padding-block: 12px;
+    display: flex; flex-wrap: wrap; align-items: center; gap: 8px 22px;
+    font-family: var(--f-mono); font-size: 12.5px;
+  }
+  .sitenav .brand { font-weight: 700; color: var(--ink); text-decoration: none; margin-right: auto; }
+  .sitenav a { color: var(--muted); text-decoration: none; }
+  .sitenav a[aria-current="page"] { color: var(--accent); font-weight: 700; }
+  .sitenav a:hover, .sitenav a:focus-visible { color: var(--accent); }
+  .sitenav a:focus-visible { outline: 2px solid var(--accent); outline-offset: 3px; border-radius: 2px; }
+</style>
+</head>
+<body>
+<nav class="sitenav" aria-label="Site">
+  <div class="in">
+    <a class="brand" href="./">riscv-pico</a>
+    <a href="./" aria-current="page">Overview</a>
+    <a href="vga.html">VGA bench card</a>
+    <a href="https://github.com/flyboy-byte/riscv-pico">GitHub ↗</a>
+  </div>
+</nav>
+<div class="wrap">
+
+  <header>
+    <span class="eyebrow">flyboy-byte / riscv-pico</span>
+    <h1>riscv-pico</h1>
+    <p class="lede">A Raspberry Pi Pico running real Linux. The RP2040 emulates a RISC-V CPU, SPI PSRAM stands in for system memory, and the Linux guest reaches back out to drive physical pins.</p>
+    <p class="sub">A $4 microcontroller with 264 KB of RAM and no memory management unit, hosting a 16 MB Linux machine that boots to a shell, edits files in nano, and lights an LED from a shell command.</p>
+
+    <div class="stats">
+      <div class="stat"><span class="v">264 KB</span><span class="k">Real RAM</span></div>
+      <div class="stat"><span class="v">16 MB</span><span class="k">Emulated RAM</span></div>
+      <div class="stat"><span class="v">1.42</span><span class="k">Guest MIPS</span></div>
+      <div class="stat"><span class="v">15.9 s</span><span class="k">To root mount</span></div>
+      <div class="stat"><span class="v">400 MHz</span><span class="k">Overclocked</span></div>
+      <div class="stat"><span class="v">~$20</span><span class="k">Parts cost</span></div>
+    </div>
+  </header>
+
+  <section>
+    <h2>What it is</h2>
+    <p>Core 1 of the RP2040 runs a full RV32IMA interpreter. Two SPI PSRAM chips stand in for system memory, and an SD card holds the kernel and root filesystem. Linux 6.6 boots on top of that.</p>
+    <p>The part worth caring about is not that Linux boots. It is that the emulated guest can reach real hardware. Typing <span class="mono">echo 1 &gt; /sys/class/gpio/gpio512/value</span> into a shell inside the emulator ends with current flowing out of a physical pin.</p>
+
+    <figure>
+      <div class="plate">
+        <svg viewBox="0 0 800 452" role="img" aria-label="Layered diagram: a RISC-V Linux guest running applications and drivers, communicating through CSR instructions to the RP2040's two cores, which drive PSRAM, an SD card, GPIO pins, an OLED panel and console hardware">
+
+          <defs>
+            <marker id="a" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+              <path d="M 0 1 L 10 5 L 0 9 z" fill="currentColor"></path>
+            </marker>
+            <marker id="aa" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+              <path d="M 0 1 L 10 5 L 0 9 z" fill="var(--accent)"></path>
+            </marker>
+          </defs>
+
+          <rect x="30" y="26" width="740" height="136" rx="5" fill="var(--surface-2)" stroke="currentColor" stroke-opacity="0.35" stroke-width="1.3"></rect>
+          <text x="46" y="48" font-family="JetBrains Mono, monospace" font-size="11" font-weight="700" letter-spacing="1.4" fill="currentColor" opacity="0.6">RISC-V LINUX GUEST — EMULATED</text>
+
+          <g font-family="JetBrains Mono, monospace" font-size="11.5" text-anchor="middle">
+            <rect x="46"  y="62" width="106" height="26" rx="3" fill="var(--surface)" stroke="currentColor" stroke-opacity="0.3"></rect><text x="99"  y="79" fill="currentColor">shell</text>
+            <rect x="162" y="62" width="106" height="26" rx="3" fill="var(--surface)" stroke="currentColor" stroke-opacity="0.3"></rect><text x="215" y="79" fill="currentColor">BASIC</text>
+            <rect x="278" y="62" width="106" height="26" rx="3" fill="var(--surface)" stroke="currentColor" stroke-opacity="0.3"></rect><text x="331" y="79" fill="currentColor">Lua 5.4</text>
+            <rect x="394" y="62" width="106" height="26" rx="3" fill="var(--surface)" stroke="currentColor" stroke-opacity="0.3"></rect><text x="447" y="79" fill="currentColor">nano 7.2</text>
+            <rect x="510" y="62" width="106" height="26" rx="3" fill="var(--surface)" stroke="currentColor" stroke-opacity="0.3"></rect><text x="563" y="79" fill="currentColor">curl</text>
+            <rect x="626" y="62" width="106" height="26" rx="3" fill="var(--surface)" stroke="currentColor" stroke-opacity="0.3"></rect><text x="679" y="79" fill="currentColor">sysinfo</text>
+          </g>
+
+          <text x="46" y="112" font-family="JetBrains Mono, monospace" font-size="12.5" fill="currentColor">Linux 6.6 · nommu · RV32IMA</text>
+          <text x="46" y="140" font-family="JetBrains Mono, monospace" font-size="12.5" fill="currentColor" opacity="0.75">drivers: gpio-tinyrv32 · block · console · SLIP</text>
+
+          <line x1="30" y1="190" x2="770" y2="190" stroke="var(--accent)" stroke-width="1.6" stroke-dasharray="7 5"></line>
+          <rect x="266" y="177" width="268" height="26" rx="3" fill="var(--bg)"></rect>
+          <text x="400" y="195" font-family="JetBrains Mono, monospace" font-size="11.5" font-weight="700" fill="var(--accent)" text-anchor="middle">CSR instructions — the whole seam</text>
+
+          <rect x="30" y="218" width="740" height="104" rx="5" fill="var(--surface-2)" stroke="currentColor" stroke-opacity="0.35" stroke-width="1.3"></rect>
+          <text x="46" y="240" font-family="JetBrains Mono, monospace" font-size="11" font-weight="700" letter-spacing="1.4" fill="currentColor" opacity="0.6">RP2040 @ 400 MHz — REAL SILICON</text>
+
+          <g font-family="JetBrains Mono, monospace" font-size="12.5">
+            <rect x="46" y="254" width="340" height="52" rx="3" fill="var(--surface)" stroke="currentColor" stroke-opacity="0.3"></rect>
+            <text x="62" y="274" fill="currentColor" font-weight="700">core 1</text>
+            <text x="62" y="293" fill="currentColor" opacity="0.75" font-size="11.5">tiny-rv32ima interpreter</text>
+
+            <rect x="414" y="254" width="340" height="52" rx="3" fill="var(--surface)" stroke="currentColor" stroke-opacity="0.3"></rect>
+            <text x="430" y="274" fill="currentColor" font-weight="700">core 0</text>
+            <text x="430" y="293" fill="currentColor" opacity="0.75" font-size="11.5">CSR handlers · console · OLED</text>
+          </g>
+
+          <g stroke="currentColor" stroke-width="1.3" opacity="0.5">
+            <line x1="105" y1="322" x2="105" y2="362" marker-end="url(#a)"></line>
+            <line x1="253" y1="322" x2="253" y2="362" marker-end="url(#a)"></line>
+            <line x1="400" y1="322" x2="400" y2="362" marker-end="url(#a)"></line>
+            <line x1="548" y1="322" x2="548" y2="362" marker-end="url(#a)"></line>
+            <line x1="696" y1="322" x2="696" y2="362" marker-end="url(#a)"></line>
+          </g>
+
+          <g font-family="JetBrains Mono, monospace" font-size="11.5" text-anchor="middle">
+            <rect x="36"  y="366" width="138" height="56" rx="4" fill="var(--surface)" stroke="currentColor" stroke-opacity="0.3"></rect>
+            <text x="105" y="388" fill="currentColor" font-weight="700">2× PSRAM</text><text x="105" y="406" fill="currentColor" opacity="0.7" font-size="10.5">16 MB = system RAM</text>
+
+            <rect x="184" y="366" width="138" height="56" rx="4" fill="var(--surface)" stroke="currentColor" stroke-opacity="0.3"></rect>
+            <text x="253" y="388" fill="currentColor" font-weight="700">microSD</text><text x="253" y="406" fill="currentColor" opacity="0.7" font-size="10.5">kernel + 60 MB rootfs</text>
+
+            <rect x="331" y="366" width="138" height="56" rx="4" fill="var(--surface)" stroke="currentColor" stroke-opacity="0.3"></rect>
+            <text x="400" y="388" fill="currentColor" font-weight="700">GPIO pins</text><text x="400" y="406" fill="currentColor" opacity="0.7" font-size="10.5">LEDs, buttons</text>
+
+            <rect x="479" y="366" width="138" height="56" rx="4" fill="var(--surface)" stroke="currentColor" stroke-opacity="0.3"></rect>
+            <text x="548" y="388" fill="currentColor" font-weight="700">SSD1306</text><text x="548" y="406" fill="currentColor" opacity="0.7" font-size="10.5">live stats panel</text>
+
+            <rect x="627" y="366" width="138" height="56" rx="4" fill="var(--surface)" stroke="var(--accent)" stroke-opacity="0.55"></rect>
+            <text x="696" y="388" fill="currentColor" font-weight="700">console I/O</text><text x="696" y="406" fill="currentColor" opacity="0.7" font-size="10.5">USB · PS/2 · VGA</text>
+          </g>
+
+          <text x="400" y="444" font-family="JetBrains Mono, monospace" font-size="10.5" fill="currentColor" opacity="0.5" text-anchor="middle">Linux sees ordinary devices. The RP2040 does the translating underneath.</text>
+        </svg>
+      </div>
+      <figcaption>Everything the guest can do to the outside world crosses one dashed line. That seam is a handful of custom CSR registers, which is why adding a new peripheral means writing a Linux driver on one side and a handler on the other, rather than modifying the emulator core.</figcaption>
+    </figure>
+  </section>
+
+  <section>
+    <h2>Where the memory comes from</h2>
+    <p>This is the trick the whole project rests on. The RP2040 has 264 KB of SRAM and the guest thinks it has 16 MB, so guest memory lives on two serial PSRAM chips and the RP2040's own SRAM becomes a cache in front of them.</p>
+
+    <figure>
+      <div class="plate">
+        <svg viewBox="0 0 760 216" role="img" aria-label="Guest address space of 16 megabytes passes through a cache held in RP2040 SRAM, then over a 20 megahertz SPI bus, where the address modulo 8 megabytes selects one of two PSRAM chips">
+          <defs>
+            <marker id="b" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+              <path d="M 0 1 L 10 5 L 0 9 z" fill="currentColor"></path>
+            </marker>
+          </defs>
+
+          <rect x="24" y="46" width="150" height="118" rx="4" fill="var(--surface-2)" stroke="currentColor" stroke-opacity="0.35" stroke-width="1.3"></rect>
+          <text x="99" y="96" font-family="JetBrains Mono, monospace" font-size="12.5" font-weight="700" fill="currentColor" text-anchor="middle">guest RAM</text>
+          <text x="99" y="116" font-family="JetBrains Mono, monospace" font-size="11.5" fill="currentColor" opacity="0.7" text-anchor="middle">flat 0 – 16 MB</text>
+
+          <line x1="178" y1="105" x2="238" y2="105" stroke="currentColor" stroke-width="1.4" marker-end="url(#b)"></line>
+
+          <rect x="242" y="46" width="164" height="118" rx="4" fill="var(--surface)" stroke="var(--accent)" stroke-opacity="0.6" stroke-width="1.4"></rect>
+          <text x="324" y="88" font-family="JetBrains Mono, monospace" font-size="12.5" font-weight="700" fill="currentColor" text-anchor="middle">cache</text>
+          <text x="324" y="108" font-family="JetBrains Mono, monospace" font-size="11" fill="currentColor" opacity="0.7" text-anchor="middle">in RP2040 SRAM</text>
+          <text x="324" y="126" font-family="JetBrains Mono, monospace" font-size="11" fill="currentColor" opacity="0.7" text-anchor="middle">264 KB, total</text>
+
+          <line x1="410" y1="105" x2="486" y2="105" stroke="currentColor" stroke-width="1.4" marker-end="url(#b)"></line>
+          <text x="448" y="96" font-family="JetBrains Mono, monospace" font-size="10.5" fill="currentColor" opacity="0.6" text-anchor="middle">SPI</text>
+          <text x="448" y="124" font-family="JetBrains Mono, monospace" font-size="10.5" fill="currentColor" opacity="0.6" text-anchor="middle">20 MHz</text>
+
+          <rect x="490" y="42" width="150" height="54" rx="4" fill="var(--surface)" stroke="currentColor" stroke-opacity="0.35" stroke-width="1.3"></rect>
+          <text x="565" y="64" font-family="JetBrains Mono, monospace" font-size="12" font-weight="700" fill="currentColor" text-anchor="middle">chip 1 · CS GP13</text>
+          <text x="565" y="82" font-family="JetBrains Mono, monospace" font-size="11" fill="currentColor" opacity="0.7" text-anchor="middle">8 MB · 0 – 8 M</text>
+
+          <rect x="490" y="114" width="150" height="54" rx="4" fill="var(--surface)" stroke="currentColor" stroke-opacity="0.35" stroke-width="1.3"></rect>
+          <text x="565" y="136" font-family="JetBrains Mono, monospace" font-size="12" font-weight="700" fill="currentColor" text-anchor="middle">chip 2 · CS GP14</text>
+          <text x="565" y="154" font-family="JetBrains Mono, monospace" font-size="11" fill="currentColor" opacity="0.7" text-anchor="middle">8 MB · 8 – 16 M</text>
+
+          <text x="660" y="100" font-family="JetBrains Mono, monospace" font-size="11" fill="var(--accent)">addr</text>
+          <text x="660" y="118" font-family="JetBrains Mono, monospace" font-size="11" fill="var(--accent)">picks</text>
+          <text x="660" y="136" font-family="JetBrains Mono, monospace" font-size="11" fill="var(--accent)">the chip</text>
+
+          <text x="380" y="196" font-family="JetBrains Mono, monospace" font-size="10.5" fill="currentColor" opacity="0.55" text-anchor="middle">a chip that fails at 50 MHz and passes at 20 is a signal-integrity problem, not a dead chip</text>
+        </svg>
+      </div>
+      <figcaption>The chip-select split is address-based, so the two chips present as one flat 16 MB space. That boundary was verified on hardware by measurement rather than inference, because a modulo that silently wraps would look exactly like working memory until something important landed above 8 MB.</figcaption>
+    </figure>
+  </section>
+
+  <section>
+    <h2>The guest-to-firmware interface</h2>
+    <p>Every capability the guest has beyond raw computation is a custom control register. The emulator core falls through to a handler for any register it does not recognise, which is why most of these needed no changes to the vendored emulator at all.</p>
+
+    <div class="tbl-scroll">
+      <table>
+        <thead>
+          <tr><th>CSR</th><th>What it carries</th><th>Guest sees</th></tr>
+        </thead>
+        <tbody>
+          <tr><td class="mono">0x150–0x155</td><td>Block device, the root filesystem</td><td class="mono">root=fe00</td></tr>
+          <tr><td class="mono">0x170</td><td>Hibernate and snapshot</td><td>—</td></tr>
+          <tr><td class="mono">0x180–0x183</td><td>Bit-banged SPI bus</td><td>SPI master</td></tr>
+          <tr><td class="mono">0x1a0–0x1a3</td><td>GPIO pin select and operation</td><td class="mono">/dev/gpiochip0</td></tr>
+          <tr><td class="mono">0x141–0x142</td><td>Second console channel, SLIP transport</td><td class="mono">hvc1</td></tr>
+        </tbody>
+      </table>
+    </div>
+
+    <div class="note">
+      <span class="label">Why this shape was kept</span>
+      The framing that stuck is that this is not "Linux boots on a Pico" so much as a paravirtualised RISC-V machine hosted by an RP2040. Linux sees standard subsystems, a real gpiochip with the <span class="mono">GPIO_V2</span> uAPI rather than a bespoke character device, and the custom transport stays underneath where userspace never meets it. That is what lets stock <span class="mono">libgpiod</span> tools work unmodified.
+    </div>
+  </section>
+
+  <section>
+    <h2>Pin and wiring map</h2>
+    <p>Every GPIO the Pico exposes is assigned. The four pins that look free in <span class="mono">hw_config.h</span> are the guest's own GPIO lines, set separately in <span class="mono">hal_csr.h</span>. Values below are read from those two files, not from the upstream README.</p>
+
+    <figure>
+      <div class="plate">
+<svg viewBox="0 0 820 640" role="img" aria-label="Top view of the Raspberry Pi Pico with all forty pins labelled by function and colour-coded by subsystem: SD card, guest SPI, guest GPIO, PSRAM, VGA, OLED, PS/2, power and ground">
+<rect x="310" y="36" width="200" height="588" rx="10" fill="var(--surface-2)" stroke="currentColor" stroke-opacity="0.4" stroke-width="1.4"></rect>
+<rect x="380" y="22" width="60" height="22" rx="4" fill="none" stroke="currentColor" stroke-opacity="0.45" stroke-width="1.4"></rect>
+<g font-family="JetBrains Mono, monospace" text-anchor="middle" fill="currentColor"><text x="410" y="312" font-size="13" font-weight="700">Pico H</text><text x="410" y="330" font-size="11" opacity="0.6">RP2040</text><text x="410" y="348" font-size="10" opacity="0.5">top view · USB up</text></g>
+<g font-family="JetBrains Mono, monospace" font-size="11.5">
+<circle cx="326" cy="54.5" r="6" fill="var(--c-sd)"></circle>
+<text x="296" y="58.5" text-anchor="end" fill="var(--c-sd)">SD CS · GP0</text>
+<text x="342" y="58.0" font-size="9.5" fill="currentColor" opacity="0.55">1</text>
+<circle cx="326" cy="83.5" r="6" fill="var(--c-gg)"></circle>
+<text x="296" y="87.5" text-anchor="end" fill="var(--c-gg)">Guest GPIO 0 · LED · GP1</text>
+<text x="342" y="87.0" font-size="9.5" fill="currentColor" opacity="0.55">2</text>
+<circle cx="326" cy="112.5" r="6" fill="none" stroke="currentColor" stroke-opacity="0.45" stroke-width="1.3"></circle>
+<text x="296" y="116.5" text-anchor="end" fill="currentColor" opacity="0.5">GND</text>
+<text x="342" y="116.0" font-size="9.5" fill="currentColor" opacity="0.55">3</text>
+<circle cx="326" cy="141.5" r="6" fill="var(--c-sd)"></circle>
+<text x="296" y="145.5" text-anchor="end" fill="var(--c-sd)">SD SCK · GP2</text>
+<text x="342" y="145.0" font-size="9.5" fill="currentColor" opacity="0.55">4</text>
+<circle cx="326" cy="170.5" r="6" fill="var(--c-sd)"></circle>
+<text x="296" y="174.5" text-anchor="end" fill="var(--c-sd)">SD MOSI · GP3</text>
+<text x="342" y="174.0" font-size="9.5" fill="currentColor" opacity="0.55">5</text>
+<circle cx="326" cy="199.5" r="6" fill="var(--c-sd)"></circle>
+<text x="296" y="203.5" text-anchor="end" fill="var(--c-sd)">SD MISO · GP4</text>
+<text x="342" y="203.0" font-size="9.5" fill="currentColor" opacity="0.55">6</text>
+<circle cx="326" cy="228.5" r="6" fill="var(--c-bb)"></circle>
+<text x="296" y="232.5" text-anchor="end" fill="var(--c-bb)">Guest SPI CS · GP5</text>
+<text x="342" y="232.0" font-size="9.5" fill="currentColor" opacity="0.55">7</text>
+<circle cx="326" cy="257.5" r="6" fill="none" stroke="currentColor" stroke-opacity="0.45" stroke-width="1.3"></circle>
+<text x="296" y="261.5" text-anchor="end" fill="currentColor" opacity="0.5">GND</text>
+<text x="342" y="261.0" font-size="9.5" fill="currentColor" opacity="0.55">8</text>
+<circle cx="326" cy="286.5" r="6" fill="var(--c-bb)"></circle>
+<text x="296" y="290.5" text-anchor="end" fill="var(--c-bb)">Guest SPI SCK · GP6</text>
+<text x="342" y="290.0" font-size="9.5" fill="currentColor" opacity="0.55">9</text>
+<circle cx="326" cy="315.5" r="6" fill="var(--c-bb)"></circle>
+<text x="296" y="319.5" text-anchor="end" fill="var(--c-bb)">Guest SPI MOSI · GP7</text>
+<text x="342" y="319.0" font-size="9.5" fill="currentColor" opacity="0.55">10</text>
+<circle cx="326" cy="344.5" r="6" fill="var(--c-bb)"></circle>
+<text x="296" y="348.5" text-anchor="end" fill="var(--c-bb)">Guest SPI MISO · GP8</text>
+<text x="342" y="348.0" font-size="9.5" fill="currentColor" opacity="0.55">11</text>
+<circle cx="326" cy="373.5" r="6" fill="var(--c-gg)"></circle>
+<text x="296" y="377.5" text-anchor="end" fill="var(--c-gg)">Guest GPIO 1 · GP9</text>
+<text x="342" y="377.0" font-size="9.5" fill="currentColor" opacity="0.55">12</text>
+<circle cx="326" cy="402.5" r="6" fill="none" stroke="currentColor" stroke-opacity="0.45" stroke-width="1.3"></circle>
+<text x="296" y="406.5" text-anchor="end" fill="currentColor" opacity="0.5">GND</text>
+<text x="342" y="406.0" font-size="9.5" fill="currentColor" opacity="0.55">13</text>
+<circle cx="326" cy="431.5" r="6" fill="var(--c-ps)"></circle>
+<text x="296" y="435.5" text-anchor="end" fill="var(--c-ps)">PSRAM SCK · GP10</text>
+<text x="342" y="435.0" font-size="9.5" fill="currentColor" opacity="0.55">14</text>
+<circle cx="326" cy="460.5" r="6" fill="var(--c-ps)"></circle>
+<text x="296" y="464.5" text-anchor="end" fill="var(--c-ps)">PSRAM MOSI · GP11</text>
+<text x="342" y="464.0" font-size="9.5" fill="currentColor" opacity="0.55">15</text>
+<circle cx="326" cy="489.5" r="6" fill="var(--c-ps)"></circle>
+<text x="296" y="493.5" text-anchor="end" fill="var(--c-ps)">PSRAM MISO · GP12</text>
+<text x="342" y="493.0" font-size="9.5" fill="currentColor" opacity="0.55">16</text>
+<circle cx="326" cy="518.5" r="6" fill="var(--c-ps)"></circle>
+<text x="296" y="522.5" text-anchor="end" fill="var(--c-ps)">PSRAM CS 1 · GP13</text>
+<text x="342" y="522.0" font-size="9.5" fill="currentColor" opacity="0.55">17</text>
+<circle cx="326" cy="547.5" r="6" fill="none" stroke="currentColor" stroke-opacity="0.45" stroke-width="1.3"></circle>
+<text x="296" y="551.5" text-anchor="end" fill="currentColor" opacity="0.5">GND</text>
+<text x="342" y="551.0" font-size="9.5" fill="currentColor" opacity="0.55">18</text>
+<circle cx="326" cy="576.5" r="6" fill="var(--c-ps)"></circle>
+<text x="296" y="580.5" text-anchor="end" fill="var(--c-ps)">PSRAM CS 2 · GP14</text>
+<text x="342" y="580.0" font-size="9.5" fill="currentColor" opacity="0.55">19</text>
+<circle cx="326" cy="605.5" r="6" fill="var(--c-gg)"></circle>
+<text x="296" y="609.5" text-anchor="end" fill="var(--c-gg)">Guest GPIO 2 · GP15</text>
+<text x="342" y="609.0" font-size="9.5" fill="currentColor" opacity="0.55">20</text>
+<circle cx="494" cy="54.5" r="6" fill="none" stroke="currentColor" stroke-opacity="0.45" stroke-width="1.3"></circle>
+<text x="524" y="58.5" fill="currentColor" font-weight="700">VBUS · 5 V from USB</text>
+<text x="478" y="58.0" font-size="9.5" text-anchor="end" fill="currentColor" opacity="0.55">40</text>
+<circle cx="494" cy="83.5" r="6" fill="none" stroke="currentColor" stroke-opacity="0.45" stroke-width="1.3"></circle>
+<text x="524" y="87.5" fill="currentColor" opacity="0.5">VSYS</text>
+<text x="478" y="87.0" font-size="9.5" text-anchor="end" fill="currentColor" opacity="0.55">39</text>
+<circle cx="494" cy="112.5" r="6" fill="none" stroke="currentColor" stroke-opacity="0.45" stroke-width="1.3"></circle>
+<text x="524" y="116.5" fill="currentColor" opacity="0.5">GND</text>
+<text x="478" y="116.0" font-size="9.5" text-anchor="end" fill="currentColor" opacity="0.55">38</text>
+<circle cx="494" cy="141.5" r="6" fill="none" stroke="currentColor" stroke-opacity="0.45" stroke-width="1.3"></circle>
+<text x="524" y="145.5" fill="currentColor" opacity="0.5">3V3 EN</text>
+<text x="478" y="145.0" font-size="9.5" text-anchor="end" fill="currentColor" opacity="0.55">37</text>
+<circle cx="494" cy="170.5" r="6" fill="none" stroke="currentColor" stroke-opacity="0.45" stroke-width="1.3"></circle>
+<text x="524" y="174.5" fill="currentColor" font-weight="700">3V3 OUT · PSRAM + converter LV</text>
+<text x="478" y="174.0" font-size="9.5" text-anchor="end" fill="currentColor" opacity="0.55">36</text>
+<circle cx="494" cy="199.5" r="6" fill="none" stroke="currentColor" stroke-opacity="0.45" stroke-width="1.3"></circle>
+<text x="524" y="203.5" fill="currentColor" opacity="0.5">ADC VREF</text>
+<text x="478" y="203.0" font-size="9.5" text-anchor="end" fill="currentColor" opacity="0.55">35</text>
+<circle cx="494" cy="228.5" r="6" fill="var(--c-ol)"></circle>
+<text x="524" y="232.5" fill="var(--c-ol)">GP28 · OLED SDA</text>
+<text x="478" y="232.0" font-size="9.5" text-anchor="end" fill="currentColor" opacity="0.55">34</text>
+<circle cx="494" cy="257.5" r="6" fill="none" stroke="currentColor" stroke-opacity="0.45" stroke-width="1.3"></circle>
+<text x="524" y="261.5" fill="currentColor" opacity="0.5">AGND</text>
+<text x="478" y="261.0" font-size="9.5" text-anchor="end" fill="currentColor" opacity="0.55">33</text>
+<circle cx="494" cy="286.5" r="6" fill="var(--c-k)"></circle>
+<text x="524" y="290.5" fill="var(--c-k)">GP27 · PS/2 CLK</text>
+<text x="478" y="290.0" font-size="9.5" text-anchor="end" fill="currentColor" opacity="0.55">32</text>
+<circle cx="494" cy="315.5" r="6" fill="var(--c-k)"></circle>
+<text x="524" y="319.5" fill="var(--c-k)">GP26 · PS/2 DATA</text>
+<text x="478" y="319.0" font-size="9.5" text-anchor="end" fill="currentColor" opacity="0.55">31</text>
+<circle cx="494" cy="344.5" r="6" fill="none" stroke="currentColor" stroke-opacity="0.45" stroke-width="1.3"></circle>
+<text x="524" y="348.5" fill="currentColor" opacity="0.5">RUN</text>
+<text x="478" y="348.0" font-size="9.5" text-anchor="end" fill="currentColor" opacity="0.55">30</text>
+<circle cx="494" cy="373.5" r="6" fill="var(--c-gg)"></circle>
+<text x="524" y="377.5" fill="var(--c-gg)">GP22 · Guest GPIO 3</text>
+<text x="478" y="377.0" font-size="9.5" text-anchor="end" fill="currentColor" opacity="0.55">29</text>
+<circle cx="494" cy="402.5" r="6" fill="none" stroke="currentColor" stroke-opacity="0.45" stroke-width="1.3"></circle>
+<text x="524" y="406.5" fill="currentColor" opacity="0.5">GND</text>
+<text x="478" y="406.0" font-size="9.5" text-anchor="end" fill="currentColor" opacity="0.55">28</text>
+<circle cx="494" cy="431.5" r="6" fill="var(--c-ol)"></circle>
+<text x="524" y="435.5" fill="var(--c-ol)">GP21 · OLED SCL</text>
+<text x="478" y="435.0" font-size="9.5" text-anchor="end" fill="currentColor" opacity="0.55">27</text>
+<circle cx="494" cy="460.5" r="6" fill="var(--sig-b)"></circle>
+<text x="524" y="464.5" fill="var(--sig-b)">GP20 · VGA BLUE</text>
+<text x="478" y="464.0" font-size="9.5" text-anchor="end" fill="currentColor" opacity="0.55">26</text>
+<circle cx="494" cy="489.5" r="6" fill="var(--sig-g)"></circle>
+<text x="524" y="493.5" fill="var(--sig-g)">GP19 · VGA GREEN</text>
+<text x="478" y="493.0" font-size="9.5" text-anchor="end" fill="currentColor" opacity="0.55">25</text>
+<circle cx="494" cy="518.5" r="6" fill="var(--sig-r)"></circle>
+<text x="524" y="522.5" fill="var(--sig-r)">GP18 · VGA RED</text>
+<text x="478" y="522.0" font-size="9.5" text-anchor="end" fill="currentColor" opacity="0.55">24</text>
+<circle cx="494" cy="547.5" r="6" fill="none" stroke="currentColor" stroke-opacity="0.45" stroke-width="1.3"></circle>
+<text x="524" y="551.5" fill="currentColor" opacity="0.5">GND</text>
+<text x="478" y="551.0" font-size="9.5" text-anchor="end" fill="currentColor" opacity="0.55">23</text>
+<circle cx="494" cy="576.5" r="6" fill="var(--accent)"></circle>
+<text x="524" y="580.5" fill="var(--accent)">GP17 · VGA HSYNC</text>
+<text x="478" y="580.0" font-size="9.5" text-anchor="end" fill="currentColor" opacity="0.55">22</text>
+<circle cx="494" cy="605.5" r="6" fill="var(--accent)"></circle>
+<text x="524" y="609.5" fill="var(--accent)">GP16 · VGA VSYNC</text>
+<text x="478" y="609.0" font-size="9.5" text-anchor="end" fill="currentColor" opacity="0.55">21</text>
+</g></svg>
+      </div>
+      <div class="legend">
+        <span class="key"><span class="swatch" style="background:var(--c-ps)"></span>PSRAM</span>
+        <span class="key"><span class="swatch" style="background:var(--c-sd)"></span>microSD</span>
+        <span class="key"><span class="swatch" style="background:var(--sig-r)"></span><span class="swatch" style="background:var(--sig-g)"></span><span class="swatch" style="background:var(--sig-b)"></span><span class="swatch" style="background:var(--accent)"></span>VGA</span>
+        <span class="key"><span class="swatch" style="background:var(--c-ol)"></span>OLED</span>
+        <span class="key"><span class="swatch" style="background:var(--c-k)"></span>PS/2</span>
+        <span class="key"><span class="swatch" style="background:var(--c-gg)"></span>Guest GPIO</span>
+        <span class="key"><span class="swatch" style="background:var(--c-bb)"></span>Guest SPI</span>
+        <span class="key"><span class="swatch" style="border:1.3px solid var(--muted)"></span>Power, ground, system</span>
+      </div>
+      <figcaption>Physical pin numbers sit inside the board outline, GPIO numbers beside the function. Pin 1 is top left beside the USB connector; the right side counts upward from pin 21 at the bottom.</figcaption>
+    </figure>
+
+    <h3>Device by device</h3>
+    <div class="tbl-scroll">
+      <table>
+        <thead><tr><th>Device</th><th>Pico pins</th><th>Watch out for</th></tr></thead>
+        <tbody>
+          <tr><td><strong>2× PSRAM</strong></td><td class="mono">SCK GP10 · MOSI GP11 · MISO GP12<br>CS GP13 chip 1 · GP14 chip 2</td><td>SIO2 and SIO3 pulled high through one shared 10 kΩ. 100 nF at each chip. 20 MHz on a breadboard.</td></tr>
+          <tr><td><strong>microSD module</strong></td><td class="mono">CS GP0 · SCK GP2<br>MOSI GP3 · MISO GP4</td><td>MOSI and CLK cross over between the module header and the Pico. 4 to 32 GB, FAT32 only.</td></tr>
+          <tr><td><strong>SSD1306 OLED</strong></td><td class="mono">SDA GP28 · SCL GP21</td><td>VCC from the separate 3.3 V supply, not pin 36. Address 0x3C, occasionally 0x3D.</td></tr>
+          <tr><td><strong>PS/2 keyboard</strong></td><td class="mono">DATA GP26 · CLK GP27<br>through a BSS138 converter</td><td>5 V bus. Converter HV to the keyboard's 5 V, LV to pin 36. Meter the LV outputs before connecting.</td></tr>
+          <tr><td><strong>VGA, PCB_024</strong></td><td class="mono">VSYNC GP16 · HSYNC GP17<br>R GP18 · G GP19 · B GP20 · GND pin 23</td><td>Set the breakout to 3.3 V. Green and blue follow red as one PIO group.</td></tr>
+          <tr><td><strong>Guest GPIO</strong></td><td class="mono">lines 0–3 = GP1 · GP9 · GP15 · GP22</td><td>Series resistor on any LED. Line 0, physical pin 2, is the demo LED and appears as <span class="mono">gpio512</span>.</td></tr>
+          <tr><td><strong>Guest SPI</strong></td><td class="mono">CS GP5 · SCK GP6<br>MOSI GP7 · MISO GP8</td><td>Driven by the guest through CSRs. Not spare pins, even though they look idle.</td></tr>
+        </tbody>
+      </table>
+    </div>
+
+    <h3>Power and ground</h3>
+    <p>Two peripherals sharing no GPIO pins still crashed the machine, because they shared a supply node. The layout below is what fixed it, and every peripheral since has followed it.</p>
+
+    <figure>
+      <div class="plate">
+<svg viewBox="0 0 780 344" role="img" aria-label="Power distribution: the Pico's 3.3 volt output feeds only the PSRAM chips, their pull-ups and the level converter's low side; a separate breadboard supply's 3.3 volt rail feeds the SD module and OLED, and its 5 volt rail feeds the PS/2 keyboard and the converter's high side; all grounds meet at one junction">
+  <defs><marker id="pw" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M 0 1 L 10 5 L 0 9 z" fill="currentColor"></path></marker></defs>
+  <g font-family="JetBrains Mono, monospace">
+    <rect x="24" y="24" width="214" height="64" rx="4" fill="var(--surface-2)" stroke="currentColor" stroke-opacity="0.4" stroke-width="1.3"></rect>
+    <text x="40" y="50" font-size="12.5" font-weight="700" fill="currentColor">Pico 3V3 OUT</text>
+    <text x="40" y="70" font-size="11" fill="currentColor" opacity="0.65">pin 36 · regulated from USB</text>
+
+    <rect x="24" y="130" width="214" height="64" rx="4" fill="var(--surface-2)" stroke="currentColor" stroke-opacity="0.4" stroke-width="1.3"></rect>
+    <text x="40" y="156" font-size="12.5" font-weight="700" fill="currentColor">MB102 supply</text>
+    <text x="40" y="176" font-size="11" fill="currentColor" opacity="0.65">3.3 V rail</text>
+
+    <rect x="24" y="236" width="214" height="64" rx="4" fill="var(--surface-2)" stroke="currentColor" stroke-opacity="0.4" stroke-width="1.3"></rect>
+    <text x="40" y="262" font-size="12.5" font-weight="700" fill="currentColor">MB102 supply</text>
+    <text x="40" y="282" font-size="11" fill="currentColor" opacity="0.65">5 V rail</text>
+
+    <line x1="242" y1="56" x2="464" y2="56" stroke="var(--c-ps)" stroke-width="2" marker-end="url(#pw)"></line>
+    <text x="353" y="46" font-size="10.5" fill="var(--c-ps)" text-anchor="middle">quiet rail, PSRAM only</text>
+    <line x1="242" y1="162" x2="464" y2="162" stroke="currentColor" stroke-width="1.6" marker-end="url(#pw)"></line>
+    <text x="353" y="152" font-size="10.5" fill="currentColor" opacity="0.65" text-anchor="middle">switching loads kept off it</text>
+    <line x1="242" y1="268" x2="464" y2="268" stroke="var(--c-k)" stroke-width="1.6" marker-end="url(#pw)"></line>
+    <text x="353" y="258" font-size="10.5" fill="var(--c-k)" text-anchor="middle">keyboard inrush kept off 3V3</text>
+
+    <rect x="470" y="24" width="286" height="64" rx="4" fill="var(--surface)" stroke="var(--c-ps)" stroke-opacity="0.7" stroke-width="1.3"></rect>
+    <text x="486" y="50" font-size="12" fill="currentColor">2× PSRAM VCC · 10 kΩ pull-ups</text>
+    <text x="486" y="70" font-size="11" fill="currentColor" opacity="0.65">converter LV side, about 1 mA</text>
+
+    <rect x="470" y="130" width="286" height="64" rx="4" fill="var(--surface)" stroke="currentColor" stroke-opacity="0.35" stroke-width="1.3"></rect>
+    <text x="486" y="156" font-size="12" fill="currentColor">microSD module VCC</text>
+    <text x="486" y="176" font-size="11" fill="currentColor" opacity="0.65">SSD1306 OLED VCC</text>
+
+    <rect x="470" y="236" width="286" height="64" rx="4" fill="var(--surface)" stroke="var(--c-k)" stroke-opacity="0.7" stroke-width="1.3"></rect>
+    <text x="486" y="262" font-size="12" fill="currentColor">PS/2 keyboard VCC, brown wire</text>
+    <text x="486" y="282" font-size="11" fill="currentColor" opacity="0.65">converter HV side</text>
+
+    <text x="390" y="332" font-size="11" fill="var(--accent)" text-anchor="middle" font-weight="700">every ground meets at one junction at the Pico · PSRAM returns on its own GND pin</text>
+  </g>
+</svg>
+      </div>
+      <figcaption>The Pico's own 3.3 V output carries almost nothing but PSRAM, so switching current from the SD card, the OLED and the keyboard never rides on the chips' supply or their pull-up reference. VGA draws no power at all; it only shares ground through the breakout.</figcaption>
+    </figure>
+  </section>
+
+  <section>
+    <h2>Status</h2>
+    <p>What is verified on real silicon, against what merely compiles.</p>
+
+    <div class="tbl-scroll">
+      <table>
+        <thead>
+          <tr><th>State</th><th>Capability</th><th>Evidence</th></tr>
+        </thead>
+        <tbody>
+          <tr><td class="state ok">WORKING</td><td><strong>Linux boots on a real Pico</strong></td><td>Shell in under a minute, root mounted at 15.9 s</td></tr>
+          <tr><td class="state ok">WORKING</td><td><strong>GPIO from Linux to real pins</strong></td><td>Character device and sysfs both. Verified lighting an LED</td></tr>
+          <tr><td class="state ok">WORKING</td><td><strong>Real software</strong></td><td>Tiny BASIC, Lua 5.4.7, GNU nano 7.2, curl, sysinfo</td></tr>
+          <tr><td class="state ok">WORKING</td><td><strong>Custom kernel drivers</strong></td><td>Block, GPIO, second console. Real drivers, not shims</td></tr>
+          <tr><td class="state ok">WORKING</td><td><strong>Desktop harness</strong></td><td>Same kernel boots on a PC in about a second</td></tr>
+          <tr><td class="state ok">WORKING</td><td><strong>SSD1306 status panel</strong></td><td>Live MIPS, uptime and RAM at 2 Hz</td></tr>
+          <tr><td class="state ok">WORKING</td><td><strong>PS/2 keyboard console</strong></td><td>Verified 2026-09-11. Typed into nano on the hardware</td></tr>
+          <tr><td class="state wip">PENDING</td><td><strong>VGA console</strong></td><td>Code already compiled in and running. Breakout board ordered</td></tr>
+          <tr><td class="state wip">PENDING</td><td><strong>Host network bridge</strong></td><td>Guest to host works. Host to guest hits a console freeze</td></tr>
+          <tr><td class="state wip">PENDING</td><td><strong>RP2350 boards</strong></td><td>Builds clean for all four targets. Never flashed</td></tr>
+          <tr><td class="state no">BY CHOICE</td><td><strong>I²C, PWM and ADC for the guest</strong></td><td>Scoped on paper and deliberately not built</td></tr>
+        </tbody>
+      </table>
+    </div>
+  </section>
+
+  <section>
+    <h2>How it got here</h2>
+    <p>Roughly four weeks from a vendored checkout to a machine with a keyboard. The dates are the order things were actually proven, not planned.</p>
+
+    <div class="log">
+      <div class="ev"><span class="d">2026-08-15</span><span class="t"><b>Desktop harness boots to a shell.</b> The real emulator core compiled against stand-in hardware headers, so every later change could be tested without a Pico.</span></div>
+      <div class="ev"><span class="d">2026-08-15</span><span class="t"><b>Cross-compiler built and proven.</b> Compile, inject into the rootfs, boot, run. Roughly two hours of build for a toolchain that has been reused ever since.</span></div>
+      <div class="ev"><span class="d">2026-08-16</span><span class="t"><b>GNU nano runs.</b> A real full-screen editor, which meant terminal handling and the C library were genuinely correct rather than approximately correct.</span></div>
+      <div class="ev"><span class="d">2026-08-25</span><span class="t"><b>Both PSRAM chips graded good.</b> The firmware's own JEDEC ID check turned out to be the fastest way to grade hand-soldered parts.</span></div>
+      <div class="ev peak"><span class="d">2026-08-27</span><span class="t"><b>First Linux boot on real hardware.</b> Two chips wired at once for 16 MB, SD card attached, shell on the Pico itself. nano ran and saved a file.</span></div>
+      <div class="ev"><span class="d">2026-08-29</span><span class="t"><b>GPIO end to end.</b> A shell command inside the emulator lit a physical LED, through a custom CSR, the emulator, and an RP2040 pin.</span></div>
+      <div class="ev"><span class="d">2026-08-29</span><span class="t"><b>A power bug found and fixed.</b> The OLED destabilised the PSRAM bus through a shared 3V3 node. Resolved with a separate supply and a single-point ground tie, which has been the template for every peripheral since.</span></div>
+      <div class="ev peak"><span class="d">2026-09-11</span><span class="t"><b>PS/2 keyboard works.</b> First real keyboard input to the emulated machine, with no firmware change needed. The driver was already compiled in and feeding the shared input queue.</span></div>
+    </div>
+  </section>
+
+  <section>
+    <h2>What's next</h2>
+    <ul>
+      <li><strong>VGA console.</strong> A breakout board arrives around 2026-09-14. The code has been compiled in and driving those pins into open air for weeks, so this is six jumpers and no firmware change. That makes the machine self-hosted: keyboard in, display out, no laptop in the loop.</li>
+      <li><strong>The host network bridge.</strong> Guest to host byte transfer works. The other direction hits an unresolved console freeze, and that bug is written up rather than guessed at.</li>
+      <li><strong>RP2350.</strong> Four board targets build clean. None have been flashed, so the claim stays marked unverified.</li>
+    </ul>
+    <p>Explicitly not on the list: turning this into a framework, a build system, or a general-purpose emulator project. It is a bring-up and porting workbench and the scope fence is written into the repo.</p>
+  </section>
+
+  <section>
+    <h2>Standing on</h2>
+    <p>This repo forks and glues; the hard work is upstream. Four projects carry it.</p>
+    <div class="tbl-scroll">
+      <table>
+        <thead><tr><th>Project</th><th>What it gave this repo</th></tr></thead>
+        <tbody>
+          <tr><td class="mono">tvlad1234/pico-rv32ima</td><td>The fork point, actively maintained, plus the VGA and PS/2 console code</td></tr>
+          <tr><td class="mono">tvlad1234/tiny-rv32ima</td><td>The emulator core everything runs on</td></tr>
+          <tr><td class="mono">ElectroBoy404NotFound/pico-linux</td><td>The multi-chip PSRAM approach</td></tr>
+          <tr><td class="mono">cnlohr/mini-rv32ima</td><td>The original RV32IMA interpreter all of the above descend from</td></tr>
+          <tr><td class="mono">xhackerustc/uc-rv32ima</td><td>The cache implementation this actually runs</td></tr>
+        </tbody>
+      </table>
+    </div>
+    <p>Star their repositories, not this one.</p>
+  </section>
+
+  <footer>
+    <p>github.com/flyboy-byte/riscv-pico · MIT · last verified on hardware 2026-09-11</p>
+    <p>State of record is PLAN.md. Build outputs ship as releases rather than committed binaries.</p>
+  </footer>
+
+</div>
+</body>
+</html>

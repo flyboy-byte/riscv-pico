@@ -252,8 +252,8 @@ Four separate jumpers — there's no free adjacent GPIO pair left on the board:
 
 | Module | Pico |
 | --- | --- |
-| `VCC` | 3V3(OUT) (pin 36) |
-| `GND` | GND (pin 28) |
+| `VCC` | 3.3 V from a **separate supply**, not pin 36 — see the power warning below |
+| `GND` | GND (pin 28), tied to that supply's ground at one point |
 | `SDA` | GP28 (pin 34) |
 | `SCL` | GP21 (pin 27) |
 
