@@ -1,0 +1,535 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="color-scheme" content="light dark">
+<meta name="description" content="Wiring reference for connecting a VGA display to the riscv-pico RP2040 build through a PCB_024 breakout.">
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>📺</text></svg>">
+<title>Pico VGA Bench Card</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Archivo:wght@600;700&family=JetBrains+Mono:wght@400;700&family=Source+Serif+4:ital,opsz,wght@0,8..60,400;0,8..60,600;1,8..60,400&display=swap">
+
+<style>
+  :root {
+    --bg:#e9ece8;
+    --surface:#f8faf7;
+    --surface-2:#dfe4dd;
+    --ink:#191d1a;
+    --muted:#5b665e;
+    --rule:#c8d0c7;
+    --accent:#15626d;
+    --accent-soft:#d3e5e8;
+    --sig-r:#c33f2f;
+    --sig-g:#24824a;
+    --sig-b:#2558b4;
+    --warn:#8d5300;
+    --warn-soft:#f2e3cd;
+    --done:#24824a;
+
+    --f-display:"Archivo","Helvetica Neue",Arial,sans-serif;
+    --f-body:"Source Serif 4",Georgia,"Times New Roman",serif;
+    --f-mono:"JetBrains Mono",ui-monospace,"SFMono-Regular",Menlo,monospace;
+  }
+
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      --bg:#121613;
+      --surface:#1a201c;
+      --surface-2:#242b26;
+      --ink:#e3e8e3;
+      --muted:#95a199;
+      --rule:#2f3833;
+      --accent:#58bcc8;
+      --accent-soft:#153037;
+      --sig-r:#f0705e;
+      --sig-g:#5cc47f;
+      --sig-b:#7ba6f2;
+      --warn:#e0a84a;
+      --warn-soft:#332713;
+      --done:#5cc47f;
+    }
+  }
+
+  :root[data-theme="dark"] {
+    --bg:#121613;
+    --surface:#1a201c;
+    --surface-2:#242b26;
+    --ink:#e3e8e3;
+    --muted:#95a199;
+    --rule:#2f3833;
+    --accent:#58bcc8;
+    --accent-soft:#153037;
+    --sig-r:#f0705e;
+    --sig-g:#5cc47f;
+    --sig-b:#7ba6f2;
+    --warn:#e0a84a;
+    --warn-soft:#332713;
+    --done:#5cc47f;
+  }
+
+  body {
+    background: var(--bg);
+    color: var(--ink);
+    font-family: var(--f-body);
+    font-size: 17px;
+    line-height: 1.6;
+    -webkit-font-smoothing: antialiased;
+  }
+
+  .wrap {
+    max-width: 860px;
+    margin: 0 auto;
+    padding-inline: 20px;
+    padding-block: 40px 72px;
+  }
+
+  h1, h2, h3 { font-family: var(--f-display); text-wrap: balance; margin: 0; }
+  h1 { font-size: clamp(30px, 6vw, 44px); font-weight: 700; letter-spacing: -0.02em; line-height: 1.08; }
+  h2 {
+    font-size: 13px; font-weight: 700; letter-spacing: 0.14em; text-transform: uppercase;
+    color: var(--accent);
+  }
+  h3 { font-size: 20px; font-weight: 600; letter-spacing: -0.01em; }
+  p { margin: 0; }
+  a { color: var(--accent); }
+
+  .eyebrow {
+    font-family: var(--f-mono); font-size: 12px; font-weight: 700;
+    letter-spacing: 0.18em; text-transform: uppercase; color: var(--muted);
+  }
+
+  header { display: flex; flex-direction: column; gap: 14px; }
+  .lede { font-size: 19px; color: var(--muted); max-width: 60ch; }
+
+  .status { display: flex; flex-wrap: wrap; gap: 10px; margin-top: 6px; }
+  .pill {
+    display: inline-flex; align-items: center; gap: 8px;
+    font-family: var(--f-mono); font-size: 12px; letter-spacing: 0.02em;
+    border: 1px solid var(--rule); border-radius: 999px;
+    padding: 5px 12px; background: var(--surface);
+  }
+  .dot { width: 8px; height: 8px; border-radius: 50%; background: var(--muted); flex: none; }
+  .dot.on { background: var(--done); }
+  .dot.pending { background: var(--warn); }
+
+  section { margin-top: 52px; display: flex; flex-direction: column; gap: 16px; }
+  section > p, section > ul, section > ol { max-width: 66ch; }
+
+  hr { border: 0; border-top: 1px solid var(--rule); margin: 0; }
+
+  ul, ol { margin: 0; padding-left: 1.2em; display: flex; flex-direction: column; gap: 9px; }
+  li::marker { color: var(--muted); }
+  strong { font-weight: 600; }
+  code, .mono { font-family: var(--f-mono); font-size: 0.86em; }
+  code { background: var(--surface-2); padding: 1px 5px; border-radius: 3px; }
+
+  figure { margin: 0; display: flex; flex-direction: column; gap: 12px; }
+  .plate {
+    background: var(--surface); border: 1px solid var(--rule); border-radius: 4px;
+    padding: 18px 16px; overflow-x: auto;
+  }
+  .plate svg { display: block; margin: 0 auto; max-width: 100%; height: auto; min-width: 460px; }
+  figcaption { font-size: 14px; color: var(--muted); max-width: 66ch; }
+
+  .legend { display: flex; flex-wrap: wrap; gap: 8px 16px; }
+  .key { display: inline-flex; align-items: center; gap: 7px; font-family: var(--f-mono); font-size: 11.5px; color: var(--muted); }
+  .swatch { width: 13px; height: 13px; border-radius: 50%; border: 1.5px solid currentColor; flex: none; }
+
+  .tbl-scroll { overflow-x: auto; }
+  table { border-collapse: collapse; width: 100%; font-size: 15px; min-width: 420px; }
+  th {
+    font-family: var(--f-mono); font-size: 11px; font-weight: 700; letter-spacing: 0.12em;
+    text-transform: uppercase; color: var(--muted); text-align: left;
+    padding: 0 14px 8px 0; border-bottom: 1px solid var(--rule); white-space: nowrap;
+  }
+  td { padding: 9px 14px 9px 0; border-bottom: 1px solid var(--rule); vertical-align: baseline; }
+  tr:last-child td { border-bottom: 0; }
+  td.num { font-family: var(--f-mono); font-variant-numeric: tabular-nums; white-space: nowrap; }
+  .chip {
+    font-family: var(--f-mono); font-size: 11px; font-weight: 700; padding: 2px 7px;
+    border-radius: 3px; white-space: nowrap;
+  }
+  .chip.r { color: var(--sig-r); background: color-mix(in srgb, var(--sig-r) 14%, transparent); }
+  .chip.g { color: var(--sig-g); background: color-mix(in srgb, var(--sig-g) 14%, transparent); }
+  .chip.b { color: var(--sig-b); background: color-mix(in srgb, var(--sig-b) 14%, transparent); }
+  .chip.s { color: var(--accent); background: var(--accent-soft); }
+  .chip.gnd { color: var(--muted); background: var(--surface-2); }
+
+  .note {
+    border-left: 3px solid var(--warn); background: var(--warn-soft);
+    padding: 14px 16px; border-radius: 0 4px 4px 0; font-size: 16px; max-width: 66ch;
+  }
+  .note .label {
+    display: block; font-family: var(--f-mono); font-size: 11px; font-weight: 700;
+    letter-spacing: 0.14em; text-transform: uppercase; color: var(--warn); margin-bottom: 5px;
+  }
+
+  .steps { counter-reset: s; list-style: none; padding: 0; gap: 14px; }
+  .steps li { display: grid; grid-template-columns: 30px 1fr; gap: 14px; align-items: start; }
+  .steps li::before {
+    counter-increment: s; content: counter(s);
+    font-family: var(--f-mono); font-size: 12px; font-weight: 700; color: var(--accent);
+    border: 1px solid var(--rule); border-radius: 3px; text-align: center;
+    padding: 3px 0; background: var(--surface);
+  }
+
+  details.fallback {
+    border: 1px solid var(--rule); border-radius: 4px; background: var(--surface);
+    padding: 0 18px;
+  }
+  details.fallback > summary {
+    cursor: pointer; padding: 14px 0; list-style: none;
+    font-family: var(--f-mono); font-size: 12px; font-weight: 700;
+    letter-spacing: 0.12em; text-transform: uppercase; color: var(--muted);
+    display: flex; align-items: center; gap: 10px;
+  }
+  details.fallback > summary::-webkit-details-marker { display: none; }
+  details.fallback > summary::before { content: "▸"; color: var(--accent); font-size: 14px; }
+  details.fallback[open] > summary::before { content: "▾"; }
+  details.fallback > summary:focus-visible { outline: 2px solid var(--accent); outline-offset: 3px; }
+  .fallback-body { display: flex; flex-direction: column; gap: 16px; padding-bottom: 22px; }
+  .fallback-body > p, .fallback-body > h3 { max-width: 66ch; }
+
+  footer { margin-top: 60px; padding-top: 20px; border-top: 1px solid var(--rule); }
+  footer p { font-family: var(--f-mono); font-size: 12px; color: var(--muted); }
+
+  @media (max-width: 560px) {
+    body { font-size: 16px; }
+    .wrap { padding-block: 28px 56px; }
+  }
+
+  html { -webkit-text-size-adjust: 100%; }
+  body { margin: 0; }
+  img { max-width: 100%; }
+  [hidden] { display: none !important; }
+  .sitenav { background: var(--surface); border-bottom: 1px solid var(--rule); }
+  .sitenav .in {
+    max-width: 880px; margin: 0 auto; padding-inline: 20px; padding-block: 12px;
+    display: flex; flex-wrap: wrap; align-items: center; gap: 8px 22px;
+    font-family: var(--f-mono); font-size: 12.5px;
+  }
+  .sitenav .brand { font-weight: 700; color: var(--ink); text-decoration: none; margin-right: auto; }
+  .sitenav a { color: var(--muted); text-decoration: none; }
+  .sitenav a[aria-current="page"] { color: var(--accent); font-weight: 700; }
+  .sitenav a:hover, .sitenav a:focus-visible { color: var(--accent); }
+  .sitenav a:focus-visible { outline: 2px solid var(--accent); outline-offset: 3px; border-radius: 2px; }
+</style>
+</head>
+<body>
+<nav class="sitenav" aria-label="Site">
+  <div class="in">
+    <a class="brand" href="./">riscv-pico</a>
+    <a href="./">Overview</a>
+    <a href="vga.html" aria-current="page">VGA bench card</a>
+    <a href="https://github.com/flyboy-byte/riscv-pico">GitHub ↗</a>
+  </div>
+</nav>
+<div class="wrap">
+
+  <header>
+    <span class="eyebrow">riscv-pico · console bring-up</span>
+    <h1>Pico VGA Bench Card</h1>
+    <p class="lede">Six jumpers from an RP2040 running RISC-V Linux to a Serial Wombat PCB_024 breakout, with values read off <span class="mono">hw_config.h</span> and the PIO source rather than the README.</p>
+    <div class="status">
+      <span class="pill"><span class="dot on"></span>PS/2 keyboard · verified 2026-09-11</span>
+      <span class="pill"><span class="dot on"></span>OLED status panel · running</span>
+      <span class="pill"><span class="dot pending"></span>VGA · PCB_024 ordered, ETA 2026-09-14</span>
+    </div>
+  </header>
+
+  <section>
+    <h2>Six jumpers</h2>
+    <p>The breakout is passive. A DE-15 socket on one end, labelled headers on the other, and the series resistors already fitted with values selectable for 3.3 V or 5 V. An ordinary VGA cable plugs in whole, so none of the conductor identification that a cut cable demands applies here.</p>
+
+    <div class="tbl-scroll">
+      <table>
+        <thead>
+          <tr><th>Breakout header</th><th>Signal</th><th>On-board R</th><th>Pico GPIO</th><th>Pico pin</th></tr>
+        </thead>
+        <tbody>
+          <tr><td class="num">R</td><td><span class="chip r">RED</span></td><td class="num">280 Ω</td><td class="num">GP18</td><td class="num">24</td></tr>
+          <tr><td class="num">G</td><td><span class="chip g">GREEN</span></td><td class="num">280 Ω</td><td class="num">GP19</td><td class="num">25</td></tr>
+          <tr><td class="num">B</td><td><span class="chip b">BLUE</span></td><td class="num">280 Ω</td><td class="num">GP20</td><td class="num">26</td></tr>
+          <tr><td class="num">HSYNC</td><td><span class="chip s">HSYNC</span></td><td class="num">100 Ω</td><td class="num">GP17</td><td class="num">22</td></tr>
+          <tr><td class="num">VSYNC</td><td><span class="chip s">VSYNC</span></td><td class="num">100 Ω</td><td class="num">GP16</td><td class="num">21</td></tr>
+          <tr><td class="num">GND</td><td><span class="chip gnd">GROUND</span></td><td class="num">—</td><td class="num">GND</td><td class="num">23</td></tr>
+        </tbody>
+      </table>
+    </div>
+
+    <p>Ground on physical pin 23 sits between HSYNC and Red in the header, so that tie is one short jumper rather than a reach across the board.</p>
+
+    <div class="note">
+      <span class="label">Set it for 3.3 V before anything else</span>
+      The voltage selection is the only setting on the board, and the Pico is a 3.3 V part. Picking the 5 V resistor values would leave the picture dim rather than damage anything, but it is the one thing to check first because it is easy to forget once the board is buried in jumpers.
+    </div>
+
+    <p>The fitted values are worth noting as corroboration. Serial Wombat specifies 280 Ω on the colour lines and 100 Ω on the syncs. Computing from the VGA spec independently, a 0.7 V peak into a 75 Ω terminated input from a 3.3 V pin needs <span class="mono">(3.3 × 75 / 0.7) − 75 = 279 Ω</span>. Two separate derivations landing in the same place is a good sign the board will behave.</p>
+  </section>
+
+  <section>
+    <h2>The chain, end to end</h2>
+
+    <figure>
+      <div class="plate">
+        <svg viewBox="0 0 820 392" role="img" aria-label="Signal chain from Pico GPIO pins through jumpers into the PCB_024 breakout, which holds the series resistors and the DE-15 socket, then out through a standard VGA cable to the monitor">
+          <defs>
+            <marker id="ar" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+              <path d="M 0 1 L 10 5 L 0 9 z" fill="currentColor"></path>
+            </marker>
+            <marker id="ar-r" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+              <path d="M 0 1 L 10 5 L 0 9 z" fill="var(--sig-r)"></path>
+            </marker>
+            <marker id="ar-g" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+              <path d="M 0 1 L 10 5 L 0 9 z" fill="var(--sig-g)"></path>
+            </marker>
+            <marker id="ar-b" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+              <path d="M 0 1 L 10 5 L 0 9 z" fill="var(--sig-b)"></path>
+            </marker>
+          </defs>
+
+          <g font-family="JetBrains Mono, monospace" font-size="10.5" font-weight="700" letter-spacing="1.6" fill="currentColor" opacity="0.55" text-anchor="middle">
+            <text x="110" y="26">PICO HEADER</text>
+            <text x="404" y="26">PCB_024 BREAKOUT</text>
+            <text x="682" y="26">DISPLAY</text>
+          </g>
+          <line x1="20" y1="36" x2="800" y2="36" stroke="currentColor" stroke-opacity="0.18"></line>
+
+          <rect x="298" y="48" width="212" height="286" rx="6" fill="var(--surface-2)" stroke="currentColor" stroke-opacity="0.4" stroke-width="1.4"></rect>
+          <text x="404" y="70" font-family="JetBrains Mono, monospace" font-size="10.5" fill="currentColor" opacity="0.55" text-anchor="middle">resistors fitted here</text>
+
+          <g font-family="JetBrains Mono, monospace" font-size="12">
+
+            <g stroke="var(--sig-r)" fill="var(--sig-r)">
+              <text x="196" y="104" text-anchor="end" stroke="none">GP18 · pin 24</text>
+              <line x1="206" y1="100" x2="292" y2="100" stroke-width="1.6" marker-end="url(#ar-r)"></line>
+              <rect x="326" y="91" width="56" height="18" rx="2" fill="none" stroke-width="1.6"></rect>
+              <text x="354" y="104" text-anchor="middle" stroke="none" font-size="10">280Ω</text>
+              <text x="396" y="104" stroke="none" font-size="11">R</text>
+            </g>
+
+            <g stroke="var(--sig-g)" fill="var(--sig-g)">
+              <text x="196" y="142" text-anchor="end" stroke="none">GP19 · pin 25</text>
+              <line x1="206" y1="138" x2="292" y2="138" stroke-width="1.6" marker-end="url(#ar-g)"></line>
+              <rect x="326" y="129" width="56" height="18" rx="2" fill="none" stroke-width="1.6"></rect>
+              <text x="354" y="142" text-anchor="middle" stroke="none" font-size="10">280Ω</text>
+              <text x="396" y="142" stroke="none" font-size="11">G</text>
+            </g>
+
+            <g stroke="var(--sig-b)" fill="var(--sig-b)">
+              <text x="196" y="180" text-anchor="end" stroke="none">GP20 · pin 26</text>
+              <line x1="206" y1="176" x2="292" y2="176" stroke-width="1.6" marker-end="url(#ar-b)"></line>
+              <rect x="326" y="167" width="56" height="18" rx="2" fill="none" stroke-width="1.6"></rect>
+              <text x="354" y="180" text-anchor="middle" stroke="none" font-size="10">280Ω</text>
+              <text x="396" y="180" stroke="none" font-size="11">B</text>
+            </g>
+
+            <g stroke="currentColor" fill="currentColor">
+              <text x="196" y="222" text-anchor="end" stroke="none">GP17 · pin 22</text>
+              <line x1="206" y1="218" x2="292" y2="218" stroke-width="1.4" marker-end="url(#ar)"></line>
+              <rect x="326" y="209" width="56" height="18" rx="2" fill="none" stroke-width="1.4"></rect>
+              <text x="354" y="222" text-anchor="middle" stroke="none" font-size="10">100Ω</text>
+              <text x="396" y="222" stroke="none" font-size="11">HSYNC</text>
+            </g>
+
+            <g stroke="currentColor" fill="currentColor">
+              <text x="196" y="260" text-anchor="end" stroke="none">GP16 · pin 21</text>
+              <line x1="206" y1="256" x2="292" y2="256" stroke-width="1.4" marker-end="url(#ar)"></line>
+              <rect x="326" y="247" width="56" height="18" rx="2" fill="none" stroke-width="1.4"></rect>
+              <text x="354" y="260" text-anchor="middle" stroke="none" font-size="10">100Ω</text>
+              <text x="396" y="260" stroke="none" font-size="11">VSYNC</text>
+            </g>
+
+            <g stroke="currentColor" fill="currentColor" opacity="0.62">
+              <text x="196" y="308" text-anchor="end" stroke="none">GND · pin 23</text>
+              <line x1="206" y1="304" x2="292" y2="304" stroke-width="4" stroke-linecap="round"></line>
+              <text x="336" y="308" stroke="none" font-size="11">GND</text>
+            </g>
+
+          </g>
+
+          <rect x="510" y="150" width="18" height="76" rx="3" fill="currentColor" opacity="0.3"></rect>
+          <text x="519" y="140" font-family="JetBrains Mono, monospace" font-size="10.5" fill="currentColor" opacity="0.55" text-anchor="middle">DE-15</text>
+
+          <line x1="534" y1="188" x2="640" y2="188" stroke="currentColor" stroke-width="2.4" marker-end="url(#ar)"></line>
+          <text x="587" y="176" font-family="JetBrains Mono, monospace" font-size="10.5" fill="currentColor" opacity="0.55" text-anchor="middle">uncut cable</text>
+          <text x="660" y="192" font-family="JetBrains Mono, monospace" font-size="12" fill="currentColor">monitor</text>
+
+          <text x="404" y="360" font-family="JetBrains Mono, monospace" font-size="10.5" fill="currentColor" opacity="0.55" text-anchor="middle">set the board for 3.3 V, not 5 V</text>
+        </svg>
+      </div>
+      <figcaption>Six jumpers in on the left, one ordinary cable out on the right. The resistors live on the breakout rather than beside the Pico, which is the trade the board makes: slightly more wire carrying a sharp edge, in exchange for no soldering and no cable dissection.</figcaption>
+    </figure>
+  </section>
+
+  <section>
+    <h2>Keep the bundle off the left edge</h2>
+
+    <figure>
+      <div class="plate">
+        <svg viewBox="0 0 460 320" role="img" aria-label="Top view of the Pico showing the PSRAM pins on the left edge and the VGA pins on the right edge, both near the bottom, with the VGA bundle routed outward to the right">
+          <rect x="150" y="24" width="160" height="272" rx="9" fill="var(--surface-2)" stroke="currentColor" stroke-opacity="0.4" stroke-width="1.4"></rect>
+          <rect x="204" y="14" width="52" height="20" rx="4" fill="none" stroke="currentColor" stroke-opacity="0.4" stroke-width="1.4"></rect>
+          <text x="230" y="62" font-family="JetBrains Mono, monospace" font-size="11" fill="currentColor" opacity="0.55" text-anchor="middle">RP2040</text>
+
+          <rect x="140" y="188" width="20" height="82" rx="3" fill="var(--warn)" opacity="0.28"></rect>
+          <rect x="300" y="200" width="20" height="82" rx="3" fill="var(--sig-b)" opacity="0.3"></rect>
+
+          <g font-family="JetBrains Mono, monospace" font-size="11" fill="currentColor">
+            <text x="128" y="216" text-anchor="end">PSRAM</text>
+            <text x="128" y="232" text-anchor="end" opacity="0.6">GP10–14</text>
+            <text x="128" y="248" text-anchor="end" opacity="0.6">pins 14–19</text>
+            <text x="128" y="266" text-anchor="end" fill="var(--warn)">20 MHz · fragile</text>
+
+            <text x="332" y="228" text-anchor="start">VGA</text>
+            <text x="332" y="244" text-anchor="start" opacity="0.6">GP16–20</text>
+            <text x="332" y="260" text-anchor="start" opacity="0.6">pins 21–26</text>
+            <text x="332" y="278" text-anchor="start" fill="var(--sig-b)">62.5 MHz · aggressor</text>
+
+            <text x="332" y="150" text-anchor="start" opacity="0.6">PS/2 · pins 31–32</text>
+            <text x="332" y="108" text-anchor="start" opacity="0.6">OLED · pins 27, 34</text>
+          </g>
+
+          <line x1="300" y1="146" x2="320" y2="146" stroke="currentColor" stroke-opacity="0.4" stroke-width="1.4"></line>
+          <line x1="300" y1="104" x2="320" y2="104" stroke="currentColor" stroke-opacity="0.4" stroke-width="1.4"></line>
+
+          <path d="M 322 300 C 370 300 396 296 420 292" fill="none" stroke="var(--sig-b)" stroke-width="2.4" marker-end="url(#ar2)"></path>
+          <defs>
+            <marker id="ar2" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+              <path d="M 0 1 L 10 5 L 0 9 z" fill="var(--sig-b)"></path>
+            </marker>
+          </defs>
+          <text x="356" y="316" font-family="JetBrains Mono, monospace" font-size="10.5" fill="var(--sig-b)" text-anchor="middle">out this way</text>
+
+          <path d="M 300 176 C 250 138 200 138 156 176" fill="none" stroke="var(--warn)" stroke-width="1.8" stroke-dasharray="5 4" opacity="0.85"></path>
+          <g stroke="var(--warn)" stroke-width="2.2" opacity="0.95">
+            <line x1="221" y1="143" x2="237" y2="159"></line>
+            <line x1="237" y1="143" x2="221" y2="159"></line>
+          </g>
+          <text x="229" y="184" font-family="JetBrains Mono, monospace" font-size="10.5" fill="var(--warn)" text-anchor="middle">never across the board</text>
+        </svg>
+      </div>
+      <figcaption>PSRAM and VGA sit on opposite edges but at the same height, near the bottom of the header. That is the one place the two bundles can meet, so the VGA breakout goes outward to the right and never arcs back over the board.</figcaption>
+    </figure>
+
+    <p>Only the three colour lines run at 62.5 MHz, and those are exactly the lines the breakout puts a series resistor on, into a 75 Ω terminated input. That is a well-damped line rather than a ringing stub. The syncs are unterminated but run at 31 kHz and 60 Hz. For comparison the PS/2 clock is around 15 kHz and caused no trouble at all.</p>
+    <p>So one breadboard is worth attempting. The failure mode is loud and shows up on the first boot, and the second board is a five-minute fallback rather than a rebuild.</p>
+  </section>
+
+  <section>
+    <h2>Bring-up order</h2>
+    <ol class="steps">
+      <li><strong>Set the board for 3.3 V.</strong> Only setting on it, and easy to forget once it is buried in jumpers.</li>
+      <li>Six jumpers from the labelled headers to GP18, GP19, GP20, GP17, GP16 and a ground.</li>
+      <li>Keep the bundle out to the right edge, away from GP10 to GP14 on the left. One breadboard to start with.</li>
+      <li><strong>Read the boot log before looking at the monitor.</strong> If <span class="mono">initPSRAM()</span> reports −1 or −2, VGA has upset the PSRAM bus. That is the decision point for splitting onto a second breadboard or dropping <span class="mono">PSRAM_SPI_SPEED_MHZ</span>, and it is a noise problem, not a dead chip.</li>
+      <li>Then check for lock. If the monitor refuses to sync, the OLED panel still tells you the machine is alive, so check sync polarity against <span class="mono">vga.c</span> before suspecting the wiring. 640×480 at 60 Hz wants both sync polarities negative.</li>
+      <li>If the colours come up wrong, swap two jumpers. Only the syncs have to be correct to get a picture at all.</li>
+    </ol>
+  </section>
+
+  <section>
+    <h2>Why green and blue have no config line</h2>
+    <p>Only <span class="mono">VGA_R_PIN</span> exists in <span class="mono">hw_config.h</span>. Green and blue are not configurable. <span class="mono">rgb_program_init()</span> takes the red pin as a base and hard-wires <span class="mono">pin</span>, <span class="mono">pin+1</span> and <span class="mono">pin+2</span> as one consecutive PIO output group, so moving red moves the other two with it. One bit per channel gives eight colours at 320×240, which is 640×480 line-doubled.</p>
+    <p>The 62.5 MHz figure is not a guess either. The PIO clock divider is system frequency over 62500, and the RP2040 here runs overclocked at 400 MHz.</p>
+    <p>None of this needs a firmware change. <span class="mono">CONSOLE_VGA</span> has been enabled since the boards-v4 release, so the PIO program and its two DMA channels have been driving those pins into open air for weeks. Attaching the cable turns on no new code path.</p>
+  </section>
+
+  <section>
+    <h2>Fallback: cutting a cable</h2>
+    <p>Kept in case the board disappoints, or a second display is wanted later. None of this is needed for the PCB_024 path.</p>
+
+    <details class="fallback">
+      <summary>Connector identification, the long way</summary>
+      <div class="fallback-body">
+
+    <figure>
+      <div class="plate">
+        <svg viewBox="0 0 420 232" role="img" aria-label="DE-15 connector face with all fifteen pins numbered, colour coded by function, five pins marked unused">
+          <path d="M 60 52 L 372 52 L 358 172 L 74 172 Z" fill="none" stroke="currentColor" stroke-width="1.6" stroke-opacity="0.5" stroke-linejoin="round"></path>
+
+          <g font-family="JetBrains Mono, monospace" font-size="10" font-weight="700" text-anchor="middle">
+
+            <circle cx="82"  cy="78" r="10" fill="var(--sig-r)"></circle><text x="82"  y="81.5" fill="var(--surface)">1</text>
+            <circle cx="140" cy="78" r="10" fill="var(--sig-g)"></circle><text x="140" y="81.5" fill="var(--surface)">2</text>
+            <circle cx="198" cy="78" r="10" fill="var(--sig-b)"></circle><text x="198" y="81.5" fill="var(--surface)">3</text>
+            <circle cx="256" cy="78" r="10" fill="none" stroke="currentColor" stroke-opacity="0.35" stroke-dasharray="2.5 2.5"></circle><text x="256" y="81.5" fill="currentColor" opacity="0.4">4</text>
+            <circle cx="314" cy="78" r="10" fill="currentColor" opacity="0.35"></circle><text x="314" y="81.5" fill="var(--surface)" opacity="1">5</text>
+
+            <circle cx="111" cy="112" r="10" fill="currentColor" opacity="0.35"></circle><text x="111" y="115.5" fill="var(--surface)">6</text>
+            <circle cx="169" cy="112" r="10" fill="currentColor" opacity="0.35"></circle><text x="169" y="115.5" fill="var(--surface)">7</text>
+            <circle cx="227" cy="112" r="10" fill="currentColor" opacity="0.35"></circle><text x="227" y="115.5" fill="var(--surface)">8</text>
+            <circle cx="285" cy="112" r="10" fill="none" stroke="currentColor" stroke-opacity="0.35" stroke-dasharray="2.5 2.5"></circle><text x="285" y="115.5" fill="currentColor" opacity="0.4">9</text>
+            <circle cx="343" cy="112" r="10" fill="currentColor" opacity="0.35"></circle><text x="343" y="115.5" fill="var(--surface)">10</text>
+
+            <circle cx="82"  cy="146" r="10" fill="none" stroke="currentColor" stroke-opacity="0.35" stroke-dasharray="2.5 2.5"></circle><text x="82"  y="149.5" fill="currentColor" opacity="0.4">11</text>
+            <circle cx="140" cy="146" r="10" fill="none" stroke="currentColor" stroke-opacity="0.35" stroke-dasharray="2.5 2.5"></circle><text x="140" y="149.5" fill="currentColor" opacity="0.4">12</text>
+            <circle cx="198" cy="146" r="10" fill="var(--accent)"></circle><text x="198" y="149.5" fill="var(--surface)">13</text>
+            <circle cx="256" cy="146" r="10" fill="var(--accent)"></circle><text x="256" y="149.5" fill="var(--surface)">14</text>
+            <circle cx="314" cy="146" r="10" fill="none" stroke="currentColor" stroke-opacity="0.35" stroke-dasharray="2.5 2.5"></circle><text x="314" y="149.5" fill="currentColor" opacity="0.4">15</text>
+
+          </g>
+
+          <g font-family="JetBrains Mono, monospace" font-size="10.5" fill="currentColor" opacity="0.6" text-anchor="middle">
+            <text x="216" y="34">FRONT FACE OF THE MALE PLUG</text>
+            <text x="216" y="204">schematic, not to scale — confirm against the numbers moulded on your shell</text>
+          </g>
+        </svg>
+      </div>
+      <div class="legend">
+        <span class="key"><span class="swatch" style="background:var(--sig-r);border-color:var(--sig-r)"></span>Red</span>
+        <span class="key"><span class="swatch" style="background:var(--sig-g);border-color:var(--sig-g)"></span>Green</span>
+        <span class="key"><span class="swatch" style="background:var(--sig-b);border-color:var(--sig-b)"></span>Blue</span>
+        <span class="key"><span class="swatch" style="background:var(--accent);border-color:var(--accent)"></span>Sync</span>
+        <span class="key"><span class="swatch" style="background:var(--muted);border-color:var(--muted)"></span>Ground</span>
+        <span class="key"><span class="swatch" style="border-style:dashed"></span>Snip and tape off</span>
+      </div>
+      <figcaption>Ten of fifteen pins are in use. Drawn from the front of the male plug, which is the orientation that matters, because the female-socket view is its mirror image.</figcaption>
+    </figure>
+
+    <div class="tbl-scroll">
+      <table>
+        <thead>
+          <tr><th>DE-15</th><th>Signal</th><th>Goes to</th></tr>
+        </thead>
+        <tbody>
+          <tr><td class="num">1 2 3</td><td><span class="chip r">R</span> <span class="chip g">G</span> <span class="chip b">B</span></td><td>270 Ω each, then GP18 / GP19 / GP20</td></tr>
+          <tr><td class="num">13 14</td><td><span class="chip s">HSYNC</span> <span class="chip s">VSYNC</span></td><td>GP17 / GP16, no resistor required</td></tr>
+          <tr><td class="num">5 6 7 8 10</td><td><span class="chip gnd">GROUNDS</span></td><td>One bus. 6, 7 and 8 are the R/G/B coax shields</td></tr>
+          <tr><td class="num">4 9 11 12 15</td><td><span class="chip gnd">UNUSED</span></td><td>Snip and tape off, DDC included</td></tr>
+        </tbody>
+      </table>
+    </div>
+
+    <p>Without the DDC pair on 12 and 15 the monitor cannot read an EDID and falls back to default timings, which is exactly what you want here.</p>
+
+    <div class="note">
+      <span class="label">The mirror trap, again</span>
+      Reading a connector diagram in the wrong view is what nearly went wrong on the keyboard. Here it is far less dangerous, because nothing in this cable carries power toward the Pico, so a mirrored reading costs you a wrong colour or no lock, never a dead pad. The self-check is the same idea as the dead-pin check on the mini-DIN: each colour pin should buzz to a coax centre, and pins 6, 7 and 8 to those same coaxes' shields. If that correspondence does not hold, you are reading the connector backwards.
+    </div>
+
+    <h3>Nine probes, not a hundred and fifty</h3>
+    <p>Work backwards from the connector instead of sweeping every wire against every pin. Put one meter lead on a DE-15 pin and sweep the conductors until one buzzes, then move to the next pin. You only care about 1, 2, 3, 6, 7, 8, 10, 13 and 14.</p>
+    <p>Colour means nothing here. VGA cable colours are no more standardised than the keyboard's were, and that cable turned out to use red for data rather than power.</p>
+
+    <h3>Perfboard construction</h3>
+    <p>The same approach that worked for the keyboard, with three changes that matter more on this cable.</p>
+    <ul>
+      <li><strong>Strain relief is not optional.</strong> A VGA cable has real mass and will lever pads off the board. Zip-tie or hot-glue the jacket where it enters the perfboard.</li>
+      <li><strong>Ground bus down one side.</strong> Land all five grounds on it, and keep each coax centre beside its own shield as far along as possible.</li>
+      <li><strong>Resistors stay off the breakout</strong>, in the breadboard row beside GP18, GP19 and GP20. If there is no room there, solder each one inline into its jumper instead: trim one lead to plug into the breadboard, solder the other to the wire, heatshrink the joint. That keeps the resistor at the driver and costs no breadboard rows.</li>
+    </ul>
+
+      </div>
+    </details>
+  </section>
+
+  <footer>
+    <p>Source of record is PLAN.md in the riscv-pico repo. Values read from hw_config.h, vga.h and rgb.pio.h — config headers are the truth, not the READMEs.</p>
+  </footer>
+
+</div>
+</body>
+</html>
