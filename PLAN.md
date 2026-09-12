@@ -356,7 +356,7 @@ well-damped line rather than a ringing stub. The syncs are unterminated but run 
 60 Hz. The PS/2 clock, for comparison, is ~15 kHz and caused no trouble at all. And the failure
 mode here is loud and shows up on the first boot, so the experiment is cheap.
 
-## Project website — GitHub Pages, built 2026-09-12, not yet published
+## Project website — GitHub Pages, LIVE since 2026-09-12
 
 `site/` holds a two-page static site: `index.html` (project overview, full 40-pin map, power and
 ground layout, CSR table, status, build log) and `vga.html` (the VGA bench card), with a shared nav.
@@ -372,7 +372,7 @@ gh api -X POST repos/flyboy-byte/riscv-pico/pages \
   -f 'source[branch]=gh-pages' -f 'source[path]=/'      # once, to enable Pages
 ```
 
-Expected URL once enabled: <https://flyboy-byte.github.io/riscv-pico/>
+**Live at <https://flyboy-byte.github.io/riscv-pico/>**, verified 2026-09-12: both pages return 200 and serve the current content. Pages was auto-enabled when the `gh-pages` branch first appeared, so the `gh api` step above answered 409 "already enabled" and is only needed if Pages is ever switched off.
 
 The same two pages also exist as private Claude artifacts, which are the review previews:
 overview <https://claude.ai/code/artifact/60afbfa9-09fa-4147-9f70-9fd64479346d>, bench card
