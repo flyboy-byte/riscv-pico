@@ -186,10 +186,15 @@ debugfs -w -R "sif usr/bin/yourprogram mode 0100755" /path/to/ROOTFS
   `BR2_PACKAGE_LIBGPIOD=y` + `BR2_PACKAGE_LIBGPIOD_TOOLS=y` in the buildroot config, full rootfs
   rebuild, tools injected onto the existing SD card ROOTFS.
 - **`hello` removed** (redundant with `sysinfo`).
-- **Lua and a GPIO C binding**: stock Lua 5.4 has no `ioctl()`/FFI, so it can't touch
+- ~~**Lua and a GPIO C binding**: stock Lua 5.4 has no `ioctl()`/FFI, so it can't touch
   `/dev/gpiochip0` directly. `os.execute("gpioset gpiochip0 0=1")` works today with no further
   build. A real `gpio.output()`/`pin:set()` Lua C module is documented as an option in PLAN.md, not
-  built — skip it unless it's actually needed, `os.execute` already covers scripting GPIO from Lua.
+  built — skip it unless it's actually needed, `os.execute` already covers scripting GPIO from Lua.~~
+  **Corrected 2026-09-14, tested in the harness:** `os.execute` does **not** work on this no-MMU
+  machine; it fails with exit 11 and a kernel trap dump. Stock Lua **can** do GPIO anyway, through
+  the sysfs files (`io.open("/sys/class/gpio/gpio512/value", "w")`), the same ones `gpio.sh`-style
+  shell scripts use. The Lua binary now also has `sys.sleep(seconds)` and `sys.ms()`; see
+  `/root/blink.lua` on the card and PLAN.md's `apps/` section.
 
 ## 6. Full story, if you want it
 

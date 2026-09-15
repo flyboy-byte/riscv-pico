@@ -395,6 +395,79 @@ well-damped line rather than a ringing stub. The syncs are unterminated but run 
 60 Hz. The PS/2 clock, for comparison, is ~15 kHz and caused no trouble at all. And the failure
 mode here is loud and shows up on the first boot, so the experiment is cheap.
 
+## No-network kernel, Lua `sys`, c4 — built and harness-verified 2026-09-14, NOT yet on the card
+
+**Status: staged, waiting on the user's go-ahead to write the card.** Everything below was tested in
+the desktop harness against a byte-for-byte copy of the real SD card, not a stock image.
+
+### Kernel without networking (the kernel half of Phase 1's `plain` image)
+
+User decision 2026-09-14: "def drop the whole networking stack". `linux-nommu.config` now has
+`# CONFIG_NET is not set` in place of `NET`, `PACKET`, `UNIX`, `INET`, `SLIP`, `SLIP_COMPRESSED` and
+the INET sub-options. The second-HVC-channel patch (`0003`) has no network dependency and stays —
+it is the status panel's transport, not networking.
+
+Rebuilt with only the kernel, in **57 seconds**, leaving the rootfs alone:
+```sh
+cp -r buildroot-overlay/board ~/.riscv-pico-scratch/repo/buildroot_overlay/   # sync repo -> scratch first
+cd ~/.riscv-pico-scratch/repo/buildroot
+make HOSTCC=gcc-12 HOSTCXX=g++-12 linux-reconfigure    # -> output/images/Image
+```
+`linux-reconfigure` regenerates `.config` from the edited defconfig; the built `.config` was checked
+for `# CONFIG_NET is not set` before trusting the image. **Never run `linux-update-config`** here — it
+writes the other direction and would overwrite the checked-in config. The existing rootfs boots on the
+new kernel unchanged: `load_modules.sh` only tries `tinyrv32ima_spi`, which was already "not found"
+on the old kernel too.
+
+| Measured in the harness, right after boot | Old kernel | No-network kernel |
+| --- | --- | --- |
+| `IMAGE` size | 3,343,548 B | **2,269,628 B** |
+| Boot log kernel code | 2695 K | **1775 K** |
+| Boot log available | 12,876 K | **13,936 K** (+1060 K) |
+| `free` total | 12,988 K | **14,032 K** |
+| `free` available | 9,896 K | **11,328 K** (+1432 K) |
+
+**About 1 MB freed — far more than the ~287 KB PLAN.md estimated** from the hash tables alone; the
+estimate ignored the stack's code. One contrary reading, not investigated: `/proc/meminfo`
+`MemAvailable` sampled a few seconds later read 9,380 K old vs 8,240 K new. Single sample each, at
+a moment when other commands had run; the boot-log and `free` figures above were taken at the same
+point in both runs and agree with each other.
+
+**Gate from Phase 1, all passed on the new kernel:** boots; `echo x > /dev/hvc1` returns 0; GPIO chip
+lists 4 lines; sysfs export/direction/value works; `lua /root/blink.lua 3` toggles line 0 three
+times and exits 0; `c4 /root/hello.c` compiles and runs; rootfs is writable. (`gpioget` reports the
+line busy after Lua exports it through sysfs — expected, the two interfaces can't both hold a line.)
+
+**Still to do for the full `plain` image:** the rootfs half — drop `ping`/`ifconfig`/`route`/
+`slattach` from busybox and `BR2_PACKAGE_LIBCURL` (curl is useless without sockets), and decide
+which applets to add. The user flagged on 2026-09-14 that the trim was deliberate: `vi` isn't wanted
+(nano exists) and `ps` seemed of little use on its own. **Not started; needs that decision first.**
+Until then `curl`, `ping`, `ifconfig` stay on the card and simply fail.
+
+### The card's filesystem had an error — found before writing, nothing written
+
+A read-only `e2fsck -n` on the card's `ROOTFS` found `/logan` (a directory the user created on the
+Pico) pointing at a deleted inode — the signature of power being cut before Linux flushed. Same class
+as open item #2. The install was aborted before any write. A trial `e2fsck -y` on a copy cleared only
+that one entry and a second pass came back clean; the user's `/root/gpio.sh` and `/lol` (a 4-byte
+file containing `lol`) were unaffected. **Worth telling the user: run `sync` before pulling power,
+or `halt`.**
+
+**Backup of the card as found**, verified byte-identical by sha256 at copy time:
+`~/.riscv-pico-scratch/backups/sd-2026-09-14/` (`IMAGE`, `DTB`, `ROOTFS`, plus `root-files/`).
+
+**Staged replacement**, ready to copy over the card's files:
+`~/.riscv-pico-scratch/work/card-staging/` — new `IMAGE`, repaired `ROOTFS` with the new `lua`,
+`/usr/bin/c4`, `/root/blink.lua` and `/root/hello.c` added, the original `DTB`, and `SHA256SUMS`.
+
+### Lua `sys`, `blink.lua`, c4
+
+Details and build recipe are in the `apps/` section. `apps/blink.lua` is the example now on the
+staged rootfs: blinks guest GPIO line 0 (GP1, physical pin 2) through sysfs with `sys.sleep`.
+
+**Publishing:** per the standing publish-builds preference, the new `Image`, `lua` and `c4` should go
+up as GitHub releases once they've run on the real card. Not done yet.
+
 ## Project website — GitHub Pages, LIVE since 2026-09-12
 
 `site/` holds a two-page static site: `index.html` (project overview, full 40-pin map, power and
@@ -974,6 +1047,9 @@ image.
 `echo x > /dev/hvc1` still returns 0. Ship as release `plain-v1`; `net-v1` stays for the harness
 and Pico 2 WH.
 
+> **Kernel half DONE and harness-verified 2026-09-14** — see "No-network kernel, Lua `sys`, c4" near
+> the top of this file. About 1 MB freed, not the ~287 KB estimated here. Rootfs half not started.
+
 #### Phase 2 — panel sink + harness panel emulator (no hardware needed)
 
 - **Firmware `console/oled/panel.c`** — the character sink implementing the protocol above, feeding
@@ -1535,6 +1611,53 @@ verify with `ps`, not `pgrep -f` — see the process-hygiene note above).
   release alongside `hello`/`basic`/`nano`. Injected directly into the real hardware SD card's
   `ROOTFS` (not just the harness) via the same `debugfs -w` recipe below — first app added
   straight to hardware rather than proven in the harness first.
+- **`lua` rebuilt with a `sys` extension, and the Lua/GPIO questions settled (2026-09-14).**
+  Tested in the desktop harness against a byte-for-byte copy of the real SD card, so these are
+  measured, not inferred:
+
+  | Test, stock Lua 5.4.7 | Result |
+  | --- | --- |
+  | GPIO through sysfs with `io.open`: export, direction, write 1/0, read back | **Works** — no C module needed |
+  | `os.execute("...")` | **Fails.** Returns `nil exit 11` and the kernel prints a trap register dump |
+  | `io.popen("...")` | **Unsupported** in this build: `'popen' not supported` |
+  | Busy-wait loop as a substitute for sleep | Works, but pins the only CPU |
+
+  That retires the earlier caveat above (fork-based calls are confirmed broken here) and the
+  tutorial's claim that `os.execute("gpioset ...")` covers GPIO from Lua, which was wrong. Stock Lua's
+  one real gap for GPIO is **no sleep**, so `apps/lua_sys.c` adds a `sys` library compiled into the
+  binary: `sys.sleep(seconds)` (nanosleep, fractional) and `sys.ms()` (integer milliseconds since
+  boot — integer because `LUA_32BITS` floats lose ms precision after a few hours). Lua's source stays
+  unmodified: `lua.c` is compiled with `-DluaL_openlibs=pico_openlibs`, renaming its single call to
+  the standard-library loader, and `pico_openlibs` loads the standard libs then `sys`.
+
+  | Harness measurement, new binary | Result |
+  | --- | --- |
+  | All standard libraries still load | yes |
+  | `sys.sleep(0.5)` measured with `sys.ms()` | 505 ms |
+  | CPU time burned during `sys.sleep(1)` | 0.0 s |
+  | Blink 5× at 100 ms on/off via sysfs | 1094 ms |
+
+  Build — **run under bash, not zsh**: zsh doesn't word-split an unquoted `$CFLAGS`-style variable,
+  so every compile receives one giant unrecognised `-mabi=` argument. Lua 5.4.7 source from
+  lua.org, sha256 `9fbf5e28ef86c69858f6d3d34eccc32e911c1a28b4120ff3e84aaa70cfbf1e30`:
+  ```sh
+  CF=(-mabi=ilp32 -fPIE -march=rv32ima -Os -DLUA_32BITS=1 -I$SRC)
+  for f in $SRC/*.c; do   # every file except lua.c and luac.c
+    $GCC "${CF[@]}" -c $f; done
+  $GCC "${CF[@]}" -DluaL_openlibs=pico_openlibs -c $SRC/lua.c
+  $GCC "${CF[@]}" -c apps/lua_sys.c
+  $GCC -mabi=ilp32 -fPIE -pie -static -march=rv32ima -Os -s -Wl,-elf2flt=-r lua.o lua_sys.o <the rest>.o -lm -o lua
+  ```
+  299,584 bytes of text against the old binary's 299,104; same 4096-byte stack.
+- **`c4` (2026-09-14)** — Robert Swierczek's "C in four functions", from `tvlad1234/c4`, a fork whose
+  only change is `long` instead of `long long` so it builds for riscv32. Compiled unmodified with the
+  standard flags to a 115 KB bFLT. Verified in the harness on the real card copy: compiles and runs a
+  C program on the machine itself, including reading `/sys/class/gpio/gpio512/value`. It compiles C to
+  its own bytecode and interprets it — not native code. Its built-in calls are only `open`, `read`,
+  `close`, `printf`, `malloc`, `free`, `memset`, `memcmp`, `exit`: with no `write`, it can read a GPIO
+  pin but not set one. Adding a call is about five small edits in a 528-line file (opcode enum, two
+  debug name strings, the keyword string at line 356 whose order must match the enum, and one line in
+  the interpreter).
 
 ### GPIO access for the guest — BUILT AND VERIFIED (2026-08-29)
 
