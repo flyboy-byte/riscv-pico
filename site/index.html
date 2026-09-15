@@ -231,12 +231,12 @@
             <rect x="162" y="62" width="106" height="26" rx="3" fill="var(--surface)" stroke="currentColor" stroke-opacity="0.3"></rect><text x="215" y="79" fill="currentColor">BASIC</text>
             <rect x="278" y="62" width="106" height="26" rx="3" fill="var(--surface)" stroke="currentColor" stroke-opacity="0.3"></rect><text x="331" y="79" fill="currentColor">Lua 5.4</text>
             <rect x="394" y="62" width="106" height="26" rx="3" fill="var(--surface)" stroke="currentColor" stroke-opacity="0.3"></rect><text x="447" y="79" fill="currentColor">nano 7.2</text>
-            <rect x="510" y="62" width="106" height="26" rx="3" fill="var(--surface)" stroke="currentColor" stroke-opacity="0.3"></rect><text x="563" y="79" fill="currentColor">curl</text>
+            <rect x="510" y="62" width="106" height="26" rx="3" fill="var(--surface)" stroke="currentColor" stroke-opacity="0.3"></rect><text x="563" y="79" fill="currentColor">c4</text>
             <rect x="626" y="62" width="106" height="26" rx="3" fill="var(--surface)" stroke="currentColor" stroke-opacity="0.3"></rect><text x="679" y="79" fill="currentColor">sysinfo</text>
           </g>
 
           <text x="46" y="112" font-family="JetBrains Mono, monospace" font-size="12.5" fill="currentColor">Linux 6.6 · nommu · RV32IMA</text>
-          <text x="46" y="140" font-family="JetBrains Mono, monospace" font-size="12.5" fill="currentColor" opacity="0.75">drivers: gpio-tinyrv32 · block · console · SLIP</text>
+          <text x="46" y="140" font-family="JetBrains Mono, monospace" font-size="12.5" fill="currentColor" opacity="0.75">drivers: gpio-tinyrv32 · block · console</text>
 
           <line x1="30" y1="190" x2="770" y2="190" stroke="var(--accent)" stroke-width="1.6" stroke-dasharray="7 5"></line>
           <rect x="266" y="177" width="268" height="26" rx="3" fill="var(--bg)"></rect>
@@ -348,7 +348,7 @@
           <tr><td class="mono">0x170</td><td>Hibernate and snapshot</td><td>—</td></tr>
           <tr><td class="mono">0x180–0x183</td><td>Bit-banged SPI bus</td><td>SPI master</td></tr>
           <tr><td class="mono">0x1a0–0x1a3</td><td>GPIO pin select and operation</td><td class="mono">/dev/gpiochip0</td></tr>
-          <tr><td class="mono">0x141–0x142</td><td>Second console channel, SLIP transport</td><td class="mono">hvc1</td></tr>
+          <tr><td class="mono">0x141–0x142</td><td>Second console channel, kept for the planned guest-driven status panel</td><td class="mono">hvc1</td></tr>
         </tbody>
       </table>
     </div>
@@ -514,7 +514,7 @@
           <tr><td><strong>microSD module</strong></td><td class="mono">CS GP0 · SCK GP2<br>MOSI GP3 · MISO GP4</td><td>MOSI and CLK cross over between the module header and the Pico. 4 to 32 GB, FAT32 only.</td></tr>
           <tr><td><strong>SSD1306 OLED</strong></td><td class="mono">SDA GP28 · SCL GP21</td><td>VCC from the separate 3.3 V supply, not pin 36. Address 0x3C, occasionally 0x3D.</td></tr>
           <tr><td><strong>PS/2 keyboard</strong></td><td class="mono">DATA GP26 · CLK GP27<br>through a BSS138 converter</td><td>5 V bus. Converter HV to the keyboard's 5 V, LV to pin 36. Meter the LV outputs before connecting.</td></tr>
-          <tr><td><strong>VGA, PCB_024</strong></td><td class="mono">VSYNC GP16 · HSYNC GP17<br>R GP18 · G GP19 · B GP20 · GND pin 23</td><td>Use the breakout's outer 3.3 V column. Green and blue follow red as one PIO group.</td></tr>
+          <tr><td><strong>VGA, <a href="https://www.amazon.com/Breakout-Resistors-Serial-Wombat-Arduino/dp/B0D4F7H59M">PCB_0024</a></strong></td><td class="mono">VSYNC GP16 · HSYNC GP17<br>R GP18 · G GP19 · B GP20 · GND pin 23</td><td>Use the breakout's outer 3.3 V column. Green and blue follow red as one PIO group.</td></tr>
           <tr><td><strong>Guest GPIO</strong></td><td class="mono">lines 0–3 = GP1 · GP9 · GP15 · GP22</td><td>Series resistor on any LED. Line 0, physical pin 2, is the demo LED and appears as <span class="mono">gpio512</span>.</td></tr>
           <tr><td><strong>Guest SPI</strong></td><td class="mono">CS GP5 · SCK GP6<br>MOSI GP7 · MISO GP8</td><td>Driven by the guest through CSRs. Not spare pins, even though they look idle.</td></tr>
         </tbody>
@@ -580,14 +580,15 @@
         <tbody>
           <tr><td class="state ok">WORKING</td><td><strong>Linux boots on a real Pico</strong></td><td>Shell in under a minute, root mounted at 15.9 s</td></tr>
           <tr><td class="state ok">WORKING</td><td><strong>GPIO from Linux to real pins</strong></td><td>Character device and sysfs both. Verified lighting an LED</td></tr>
-          <tr><td class="state ok">WORKING</td><td><strong>Real software</strong></td><td>Tiny BASIC, Lua 5.4.7, GNU nano 7.2, curl, sysinfo</td></tr>
+          <tr><td class="state ok">WORKING</td><td><strong>Real software</strong></td><td>Tiny BASIC, Lua 5.4.7, GNU nano 7.2, sysinfo</td></tr>
           <tr><td class="state ok">WORKING</td><td><strong>Custom kernel drivers</strong></td><td>Block, GPIO, second console. Real drivers, not shims</td></tr>
           <tr><td class="state ok">WORKING</td><td><strong>Desktop harness</strong></td><td>Same kernel boots on a PC in about a second</td></tr>
           <tr><td class="state ok">WORKING</td><td><strong>SSD1306 status panel</strong></td><td>Live MIPS, uptime and RAM at 2 Hz</td></tr>
           <tr><td class="state ok">WORKING</td><td><strong>PS/2 keyboard console</strong></td><td>Verified 2026-09-11. Typed into nano on the hardware</td></tr>
-          <tr><td class="state ok">WORKING</td><td><strong>VGA console</strong></td><td>Verified 2026-09-14 through a PCB_0024 breakout. No firmware change</td></tr>
+          <tr><td class="state ok">WORKING</td><td><strong>VGA console</strong></td><td>Through a <a href="https://www.amazon.com/Breakout-Resistors-Serial-Wombat-Arduino/dp/B0D4F7H59M">PCB_0024</a> breakout. No firmware change</td></tr>
           <tr><td class="state ok">WORKING</td><td><strong>Fully standalone</strong></td><td>Own keyboard, screen and power. A file edited, saved and read back with no PC attached</td></tr>
-          <tr><td class="state wip">PENDING</td><td><strong>Host network bridge</strong></td><td>Guest to host works. Host to guest hits a console freeze</td></tr>
+          <tr><td class="state wip">PENDING</td><td><strong>Programming on the Pico</strong></td><td>Lua with sleep, c4 with for and write, BASIC with BYE. Verified in the harness on the SD image; first hardware run pending</td></tr>
+          <tr><td class="state no">BY CHOICE</td><td><strong>Networking on the Pico</strong></td><td>Removed from the kernel to free about 1 MB of RAM. Still in the harness networking image</td></tr>
           <tr><td class="state wip">PENDING</td><td><strong>RP2350 boards</strong></td><td>Builds clean for all four targets. Never flashed</td></tr>
           <tr><td class="state no">BY CHOICE</td><td><strong>I²C, PWM and ADC for the guest</strong></td><td>Scoped on paper and deliberately not built</td></tr>
         </tbody>
@@ -616,7 +617,7 @@
     <h2>What's next</h2>
     <ul>
       <li><strong>Terminal size on the VGA console.</strong> nano does not wrap on the 53×30 screen, most likely because the guest still assumes an 80×24 terminal. A one-line <span class="mono">stty</span> fix is the candidate and has not been tried yet.</li>
-      <li><strong>The host network bridge.</strong> Guest to host byte transfer works. The other direction hits an unresolved console freeze, and that bug is written up rather than guessed at.</li>
+      <li><strong>First hardware run of the new SD image.</strong> The no-network kernel, Lua's sleep, c4 with <span class="mono">for</span> and <span class="mono">write</span>, and BASIC's exit command have only run in the desktop harness so far.</li>
       <li><strong>RP2350.</strong> Four board targets build clean. None have been flashed, so the claim stays marked unverified.</li>
     </ul>
     <p>Explicitly not on the list: turning this into a framework, a build system, or a general-purpose emulator project. It is a bring-up and porting workbench and the scope fence is written into the repo.</p>
@@ -624,7 +625,7 @@
 
   <section>
     <h2>Standing on</h2>
-    <p>This repo forks and glues; the hard work is upstream. Four projects carry it.</p>
+    <p>This repo forks and glues; the hard work is upstream.</p>
     <div class="tbl-scroll">
       <table>
         <thead><tr><th>Project</th><th>What it gave this repo</th></tr></thead>
@@ -634,6 +635,7 @@
           <tr><td class="mono">ElectroBoy404NotFound/pico-linux</td><td>The multi-chip PSRAM approach</td></tr>
           <tr><td class="mono">cnlohr/mini-rv32ima</td><td>The original RV32IMA interpreter all of the above descend from</td></tr>
           <tr><td class="mono">xhackerustc/uc-rv32ima</td><td>The cache implementation this actually runs</td></tr>
+          <tr><td class="mono">rswier/c4 via tvlad1234/c4</td><td>The C compiler that runs on the machine itself</td></tr>
         </tbody>
       </table>
     </div>

@@ -33,6 +33,10 @@ upstream/pico-rv32ima/tiny-rv32ima/    tvlad1234/tiny-rv32ima      (emulator cor
 upstream/pico-linux/                   ElectroBoy404NotFound/...   (2023 fork; LCD, multi-chip PSRAM)
 ```
 
+`apps/c4/` is different: a plain copy of `tvlad1234/c4` with local `for` and `write` additions, not
+a subtree, and GPL-2.0 unlike the rest of the repo. The public website lives in `site/` and publishes
+with `git subtree push --prefix site origin gh-pages`.
+
 Pulling upstream changes later:
 
 ```sh

@@ -5,7 +5,7 @@
 <h1 align="center">riscv-pico</h1>
 
 <p align="center">
-  <strong>A Raspberry Pi Pico running real Linux.</strong><br>
+  <strong>A Raspberry Pi Pico running real Linux, with its own keyboard and screen.</strong><br>
   The RP2040 emulates a RISC-V CPU, SPI PSRAM becomes system memory,<br>
   and the Linux guest drives real GPIO pins.
 </p>
@@ -15,7 +15,7 @@
   <img src="https://img.shields.io/badge/guest-Linux%206.6-informational" alt="Linux 6.6">
   <img src="https://img.shields.io/badge/CPU-RV32IMA%20(emulated)-5c4ee5" alt="RV32IMA">
   <img src="https://img.shields.io/badge/RAM-16%20MB%20SPI%20PSRAM-orange" alt="16MB PSRAM">
-  <img src="https://img.shields.io/badge/license-MIT-lightgrey" alt="MIT">
+  <img src="https://img.shields.io/badge/console-PS%2F2%20%2B%20VGA-2e8b57" alt="PS/2 + VGA">
 </p>
 
 <p align="center">
@@ -23,6 +23,7 @@
   <a href="#try-it-in-60-seconds-no-hardware">Try it</a> •
   <a href="#how-it-actually-works">How it works</a> •
   <a href="#build-one-yourself">Build one</a> •
+  <a href="#programming-on-the-pico">Programming</a> •
   <a href="#downloads">Downloads</a> •
   <a href="PLAN.md">PLAN.md</a>
 </p>
@@ -41,10 +42,11 @@
 
 | Project | What it gave this repo |
 | --- | --- |
-| **[tvlad1234/pico-rv32ima](https://github.com/tvlad1234/pico-rv32ima)** + **[tiny-rv32ima](https://github.com/tvlad1234/tiny-rv32ima)** | **The fork point.** Actively maintained, and the emulator core everything here runs on. |
+| **[tvlad1234/pico-rv32ima](https://github.com/tvlad1234/pico-rv32ima)** + **[tiny-rv32ima](https://github.com/tvlad1234/tiny-rv32ima)** | **The fork point.** Actively maintained, the emulator core, and the VGA and PS/2 console code. |
 | [ElectroBoy404NotFound/pico-linux](https://github.com/ElectroBoy404NotFound/pico-linux) | The multi-chip PSRAM port and LCD console approach. |
 | [cnlohr/mini-rv32ima](https://github.com/cnlohr/mini-rv32ima) | The original RV32IMA-in-C emulator all of the above descends from. |
 | [xhackerustc/uc-rv32ima](https://github.com/xhackerustc/uc-rv32ima) | The cache implementation this actually runs. |
+| [rswier/c4](https://github.com/rswier/c4) via [tvlad1234/c4](https://github.com/tvlad1234/c4) | The C compiler that runs on the machine itself. |
 
 **Go star their repos, not this one.**
 
@@ -56,6 +58,9 @@ A Pico has no MMU and about 264 KB of RAM. It was never meant to run an operatin
 core 1 of the RP2040 runs a full RV32IMA interpreter, two SPI PSRAM chips stand in for system
 memory, and an SD card holds the kernel and root filesystem. Linux boots on top of that — and
 custom kernel drivers let the guest reach back out through the emulator to drive **real hardware**.
+
+Add a PS/2 keyboard, a VGA monitor and a breadboard power supply, and it runs with no computer
+attached. You can write a program in nano on the Pico, run it, and have it blink an LED.
 
 <p align="center">
   <img src="docs/images/breadboard.jpg" alt="The build on a breadboard — Pico, PSRAM, SD card, and an OLED showing live stats" width="90%">
@@ -72,54 +77,54 @@ What's actually verified, versus what merely compiles. No wishful thinking in th
 | | Feature | Notes |
 |---|---|---|
 | ✅ | **Linux boots on a real Pico** | RP2040, 16 MB PSRAM, 60 MB rootfs off SD. Shell in well under a minute. |
+| ✅ | **Runs standalone** | PS/2 keyboard in, VGA out, its own power supply. Files edited and saved with no PC attached. |
 | ✅ | **GPIO from Linux → real pins** | Both `/dev/gpiochipN` (chardev + `libgpiod`) *and* `/sys/class/gpio`. Verified lighting an actual LED. |
-| ✅ | **Runs real software** | Tiny BASIC, Lua 5.4.7, GNU nano 7.2 (full-screen), `curl`, `sysinfo`. |
+| ✅ | **Runs real software** | Tiny BASIC, Lua 5.4.7, GNU nano 7.2 (full-screen), `sysinfo`. |
 | ✅ | **Custom kernel drivers** | Block device, GPIO, second console channel — real Linux drivers, not shims. |
-| ✅ | **Desktop harness** | Boots the same kernel on your PC in ~1s. No hardware needed. |
+| ✅ | **Desktop harness** | Boots the same kernel on your PC in about a second. No hardware needed. |
 | ✅ | **SSD1306 OLED panel** | A live stats visualizer. Not essential, just fun. |
+| 🚧 | **Programming on the Pico** | Lua with sleep, the c4 C compiler, BASIC with an exit command. Verified in the harness on the exact SD image; first hardware run pending. |
+| 🚧 | **Slimmer kernel** | Networking removed, about 1 MB of RAM back. Same state as the row above. |
 | 🚧 | **`pico2` / `pico2_w` (RP2350)** | Builds clean for all four board targets. Never actually flashed. |
-| ✅ | **PS/2 keyboard console** | Type straight into the guest with no PC in the loop for input. Verified 2026-09-11. |
-| ✅ | **VGA display** | Verified 2026-09-14. With the keyboard and its own power supply, it runs with no PC attached. |
-| 🚧 | **TCP/IP to the host** | Stack works, loopback-verified. The host bridge is half-built. |
+| ❌ | **Networking on the Pico** | Removed on purpose for the RAM. The stack and a half-built host bridge live on in [`net-v1`](https://github.com/flyboy-byte/riscv-pico/releases/tag/net-v1). |
 | ❌ | **I²C / SPI / PWM / ADC for the guest** | Documented as an idea in [PLAN.md](PLAN.md). Deliberately not built. |
 
 ---
 
 ## Try it in 60 seconds (no hardware)
 
-A desktop build of the **real** emulator core — same kernel, same rootfs, no Pico required.
+A desktop build of the **real** emulator core, booting the same SD card image the Pico uses.
 
 ```sh
 git clone https://github.com/flyboy-byte/riscv-pico && cd riscv-pico
 harness/build.sh
+
 mkdir images
+REL=https://github.com/flyboy-byte/riscv-pico/releases/download/sdcard-v1
+curl -L $REL/riscv-pico-sdcard-v1.tar.gz | tar xz -C images
 
-# current kernel + rootfs, plus the DTB from the networking release
-gh release download kernel-gpio-v2 -p "*.tar.gz" -O - | tar xz -C images
-gh release download net-v1 -p "*.tar.gz" -O - | tar xz -C images dtb
-
-# lay them out on a FAT image the way the firmware expects
+# lay the three files out on a FAT image, the way the firmware expects
 dd if=/dev/zero of=harness/disk.img bs=1M count=80
 mformat -F -i harness/disk.img ::
-mcopy -i harness/disk.img images/Image       ::IMAGE
-mcopy -i harness/disk.img images/dtb         ::DTB
-mcopy -i harness/disk.img images/rootfs.ext2 ::ROOTFS
+mcopy -i harness/disk.img images/IMAGE images/DTB images/ROOTFS ::
 
 python3 harness/desktop_terminal.py harness/disk.img
 ```
 
 Needs `mtools`, plus `PyQt6` and `python-pyte` (`sudo pacman -S python-pyte` on Arch). Boots to a
-shell in a couple of seconds — try `nano`, `curl --version`, `sysinfo`, `gpioinfo gpiochip0`.
+shell in a couple of seconds. Then try:
+
+| Command | What happens |
+| --- | --- |
+| `lua /root/blink.lua 3` | Blinks GPIO line 0 three times. The harness prints each pin change |
+| `c4 /root/hello.c` | Compiles and runs C on the emulated machine |
+| `basic` | Tiny BASIC. `BYE` gets you back out |
+| `nano`, `sysinfo`, `gpioinfo gpiochip0` | Editor, system banner, the GPIO chip |
 
 > [!IMPORTANT]
 > **These images won't boot under stock `mini-rv32ima`.** This project's emulator core adds custom
 > block-device and console CSRs that upstream doesn't implement, so `harness/build.sh` builds this
 > repo's own desktop copy of the *real* core instead. Background in [CLAUDE.md](CLAUDE.md).
-
-> [!TIP]
-> `basic`, `lua`, and `gpiotest` aren't in that rootfs. Grab
-> [`apps-v2`](https://github.com/flyboy-byte/riscv-pico/releases/tag/apps-v2) and inject them with
-> `debugfs -w` — recipe is in PLAN.md's "apps/" section.
 
 ---
 
@@ -133,7 +138,7 @@ current flowing out of a physical pin.
 ┌─────────────────────────────────────────────────────────────────┐
 │  RISC-V Linux guest                                 (emulated)  │
 │                                                                 │
-│      your shell  ·  BASIC  ·  Lua  ·  nano                      │
+│      shell  ·  BASIC  ·  Lua  ·  c4  ·  nano                    │
 │                       │                                         │
 │      Linux 6.6, nommu, RV32IMA                                  │
 │                       │                                         │
@@ -144,24 +149,26 @@ current flowing out of a physical pin.
 │  RP2040  @ 400 MHz                              (real silicon)  │
 │                                                                 │
 │      core 1  ──▶  tiny-rv32ima, the RV32IMA interpreter         │
-│      core 0  ──▶  CSR handlers, console, OLED                   │
+│      core 0  ──▶  CSR handlers, VGA, PS/2, OLED                 │
 └───────────────────────┬─────────────────────────────────────────┘
                         │
      ┌──────────────────┼──────────────────┬──────────────────┐
      ▼                  ▼                  ▼                  ▼
- 2x SPI PSRAM      microSD card        GPIO pins        SSD1306 OLED
- 16 MB = RAM     kernel + rootfs     LEDs, buttons      status panel
+ 2x SPI PSRAM      microSD card        GPIO pins        console I/O
+ 16 MB = RAM     kernel + rootfs     LEDs, buttons    PS/2, VGA, OLED
 ```
 
 Linux sees ordinary devices — a block device, a `gpiochip`, a console. The RP2040 does the
 translating underneath. Full GPIO walkthrough, including wiring an LED and the exact ioctls, is in
-**[docs/GPIO_AND_BASIC_TUTORIAL.md](docs/GPIO_AND_BASIC_TUTORIAL.md)**.
+**[docs/GPIO_AND_BASIC_TUTORIAL.md](docs/GPIO_AND_BASIC_TUTORIAL.md)**. The
+**[website](https://flyboy-byte.github.io/riscv-pico/)** draws the whole machine, including where
+the 16 MB of memory actually lives.
 
 ---
 
 ## Build one yourself
 
-### Parts — about $20
+### Parts — about $20 for the core
 
 Everything here is what's on the verified build. No minimum order quantities, all single-quantity
 friendly. Prices drift; this isn't a live feed.
@@ -178,6 +185,16 @@ friendly. Prices drift; this isn't a live feed.
 | Decoupling caps | a few | 100 nF ceramic + 10–100 µF bulk. Cheap insurance — see the power warning below. |
 | Breadboard + jumpers | — | |
 
+To run it without a PC, add:
+
+| Part | Qty | Notes |
+| --- | --- | --- |
+| **[Serial Wombat PCB_0024 VGA breakout](https://www.amazon.com/Breakout-Resistors-Serial-Wombat-Arduino/dp/B0D4F7H59M)** | 1 | Resistors already fitted. Plug in an ordinary VGA cable; six jumpers to the Pico. |
+| VGA monitor + cable | 1 | Anything that takes 640×480 at 60 Hz. |
+| PS/2 keyboard | 1 | A real PS/2 keyboard, not a USB keyboard on a passive purple adapter. |
+| Logic level converter, BSS138 4-channel | 1 | PS/2 is a 5 V bus. Only the keyboard needs it. |
+| USB-C breadboard power supply | 1 | 5 V rail powers the Pico and keyboard; 3.3 V rail powers the SD card and OLED. |
+
 > [!CAUTION]
 > **Get the `-SN` (SOP-8) suffix, not `-ZR`.** Same silicon, but `-ZR` is USON-8 — a 3×2 mm
 > leadless package that is genuinely painful to hand-solder or rework. Plain `APS6404L-3SQR` with
@@ -186,20 +203,23 @@ friendly. Prices drift; this isn't a live feed.
 **Substitutes work fine.** ESP-PSRAM64H, LY68L6400, and IPUS equivalents share the SOP-8 pinout and
 the `0x5D` known-good-die ID the firmware checks for. For stock across distributors, try
 [Findchips](https://www.findchips.com/search/APS6404L-3SQR-SN) or
-[Octopart](https://octopart.com/search?q=APS6404L-3SQR-SN). No level shifters needed anywhere —
-everything is 3.3 V native off the Pico's own rail.
+[Octopart](https://octopart.com/search?q=APS6404L-3SQR-SN).
 
 ### Wiring
 
-Console is USB-CDC, so no serial adapter needed. Everything is 3.3 V native.
-
-The **[project website](https://flyboy-byte.github.io/riscv-pico/)** has the full 40-pin map, a
-power and ground diagram, and a [VGA wiring bench card](https://flyboy-byte.github.io/riscv-pico/vga.html).
+The core build is 3.3 V native and its console is USB serial, so no adapter is needed. The
+**[website](https://flyboy-byte.github.io/riscv-pico/)** has the full 40-pin map, a power and
+ground diagram, and a [VGA wiring bench card](https://flyboy-byte.github.io/riscv-pico/vga.html).
 
 > [!WARNING]
 > **On the SD card module, `MOSI` and `CLK` cross over.** The module's header order does not match
 > the Pico's pin order. This is the single easiest mistake to make on the whole board, and it costs
 > you an afternoon.
+
+> [!WARNING]
+> **The PS/2 keyboard runs at 5 V, and RP2040 pins are not 5 V tolerant.** Route `CLK` and `DATA`
+> through the level converter. Before the Pico is connected, meter the converter's low-voltage
+> outputs: they must idle at 3.3 V, never 5 V. A resistor divider does not work on this bus.
 
 <details>
 <summary><b>PSRAM — two chips on a shared SPI bus</b></summary>
@@ -248,6 +268,50 @@ formatting.
 </details>
 
 <details>
+<summary><b>PS/2 keyboard, through the level converter</b></summary>
+
+<br>
+
+| Keyboard (mini-DIN-6) | Converter | Pico |
+| --- | --- | --- |
+| Pin 1, `DATA` | HV1 → LV1 | GP26 (pin 31) |
+| Pin 5, `CLK` | HV2 → LV2 | GP27 (pin 32) |
+| Pin 4, +5 V | HV | 5 V rail of the breadboard supply |
+| Pin 3, GND | GND | Common ground |
+| — | LV | 3V3 OUT (pin 36) |
+
+Wire colours are not standardised, so identify pins with a meter rather than by colour. Getting
+`DATA` and `CLK` swapped is harmless; if no keys arrive, swap them. The driver only receives, so
+Caps Lock and Num Lock lights never come on. No firmware change is needed — the keyboard driver is
+already in the firmware.
+
+</details>
+
+<details>
+<summary><b>VGA, through the Serial Wombat PCB_0024 breakout</b></summary>
+
+<br>
+
+Use the breakout's **outer** header column, which is its 3.3 V input. The inner column is sized for
+5 V and gives a dim picture.
+
+| Breakout | Pico |
+| --- | --- |
+| `V` | GP16 (pin 21) |
+| `H` | GP17 (pin 22) |
+| `GND` header | GND (pin 23) |
+| `R` | GP18 (pin 24) |
+| `G` | GP19 (pin 25) |
+| `B` | GP20 (pin 26) |
+
+Reading the column bottom to top lands on the Pico's pins in order, so the jumpers run straight.
+Leave the five round pads along the top and the solder jumpers on the back unconnected. Green and
+blue aren't configurable in firmware: they always follow red on the next two pins. The picture is
+320×240 in eight colours, and the terminal is 53×30 characters.
+
+</details>
+
+<details>
 <summary><b>SSD1306 OLED status panel (optional)</b></summary>
 
 <br>
@@ -265,6 +329,19 @@ Shows RAM/PSRAM config, boot stage, live MIPS, uptime, and clock — a stats pan
 console. It runs on core 0, which the emulator never touches, and probes at boot: with nothing
 attached, the firmware behaves exactly as if the code weren't there. Disable entirely with
 `CONSOLE_OLED 0` in `hw_config.h`. If a panel is wired but stays blank, try `OLED_I2C_ADDR 0x3D`.
+It runs alongside VGA without conflict.
+
+</details>
+
+<details>
+<summary><b>Running without a PC</b></summary>
+
+<br>
+
+Feed the breadboard supply's **5 V** rail into **VSYS (pin 39)**. Never feed 3.3 V into pin 36: that
+is the output of the Pico's own regulator, not an input. With USB unplugged there's no serial
+console, so the VGA screen shows the boot. Before pulling power, run `sync` or `halt`, or the ext2
+root filesystem can be damaged.
 
 </details>
 
@@ -284,7 +361,8 @@ attached, the firmware behaves exactly as if the code weren't there. Disable ent
 
 **Just want to flash something?** Grab
 **[`pico-rv32ima-boards-v5`](https://github.com/flyboy-byte/riscv-pico/releases/tag/pico-rv32ima-boards-v5)**
-— prebuilt `.uf2` for all four board variants, ready to go.
+— prebuilt `.uf2` for all four board variants, ready to go. It already includes the VGA, PS/2 and
+OLED consoles.
 
 <details>
 <summary><b>Or build it from source</b></summary>
@@ -300,25 +378,64 @@ firmware/build.sh              # all four boards → firmware/out/*.uf2
 firmware/build.sh pico2_w      # or just one
 ```
 
-About 140 KB per board. Flash by holding **BOOTSEL** while plugging in the Pico — it mounts as a
-USB drive called `RPI-RP2` — then copy the `.uf2` across. `pico-rv32ima` wants `IMAGE`/`DTB`/
-`ROOTFS` in the root of a FAT16/FAT32 card; `pico-linux` wants a single `Image`, already shipped at
-`upstream/pico-linux/linux/Image`.
+About 150 KB per board. Flash by holding **BOOTSEL** while plugging in the Pico — it mounts as a
+USB drive called `RPI-RP2` — then copy the `.uf2` across.
 
 </details>
 
+Then copy `IMAGE`, `DTB` and `ROOTFS` from
+**[`sdcard-v1`](https://github.com/flyboy-byte/riscv-pico/releases/tag/sdcard-v1)** to the root of
+the card.
+
 ---
 
-## Writing your own programs
+## Programming on the Pico
+
+You can write and run programs on the machine itself: open a file in nano, save it, run it. No PC.
+
+| Language | Try | Notes |
+| --- | --- | --- |
+| **Lua 5.4** | `lua blink.lua` | Adds `sys.sleep(seconds)` and `sys.ms()`, which stock Lua lacks. GPIO goes through `/sys/class/gpio`. |
+| **C, via c4** | `c4 gpio_set.c 1` | Compiles C to bytecode and interprets it. This copy adds `for` and `write`, and it can compile itself. |
+| **Tiny BASIC** | `basic` | Line-numbered BASIC. `BYE` returns to the shell. |
+| **Shell** | `sh script.sh` | busybox `hush`, not bash. |
+
+The examples are in `/root` on the SD image. Blinking an LED in Lua looks like this:
+
+```lua
+local function put(path, text)
+  local f = io.open(path, "w"); f:write(text); f:close()
+end
+
+put("/sys/class/gpio/export", "512")                 -- GPIO line 0 = Pico GP1, pin 2
+put("/sys/class/gpio/gpio512/direction", "out")
+for i = 1, 10 do
+  put("/sys/class/gpio/gpio512/value", "1"); sys.sleep(0.2)
+  put("/sys/class/gpio/gpio512/value", "0"); sys.sleep(0.2)
+end
+```
+
+`os.execute` and `io.popen` don't work from Lua here: they need `fork()`, which a no-MMU machine
+doesn't have. Details on c4's language and limits are in
+**[apps/c4/README.md](apps/c4/README.md)**.
+
+<details>
+<summary><b>Cross-compiling bigger programs on a PC</b></summary>
+
+<br>
 
 There's a real cross-compiler for this target — `riscv32-buildroot-linux-uclibc-gcc`, producing the
-`bFLT` no-MMU binary format the kernel needs. `apps/` has working examples to copy: a Tiny BASIC
-interpreter (`basic.c`), a GPIO chardev smoke test (`gpiotest.c`), `sysinfo.sh`. Lua 5.4.7 and GNU
-nano 7.2 build the same way straight from unmodified upstream sources — they're not vendored here.
+`bFLT` no-MMU binary format the kernel needs. `apps/` holds the hand-written pieces: Tiny BASIC
+(`basic.c`), the Lua `sys` extension (`lua_sys.c`), c4, a GPIO chardev smoke test (`gpiotest.c`),
+and `sysinfo.sh`. Lua 5.4.7 and GNU nano 7.2 build straight from unmodified upstream sources and
+aren't vendored here.
 
-The toolchain isn't checked in (it's a full buildroot build). The rebuild recipe, plus several
-gotchas already solved so you don't rediscover them, lives in PLAN.md's "Cross-compile toolchain"
-and "Real GNU nano" sections.
+The toolchain isn't checked in; grab
+[`toolchain-v2`](https://github.com/flyboy-byte/riscv-pico/releases/tag/toolchain-v2). The rebuild
+recipe and the gotchas already solved live in PLAN.md's "Cross-compile toolchain", "Real GNU nano"
+and "apps/" sections.
+
+</details>
 
 ---
 
@@ -328,13 +445,13 @@ Build outputs ship as GitHub releases rather than committed binaries, which keep
 
 | Release | Contents |
 | --- | --- |
-| **[`pico-rv32ima-boards-v5`](https://github.com/flyboy-byte/riscv-pico/releases/tag/pico-rv32ima-boards-v5)** | **Current firmware**, all four boards — 16 MB two-chip, OLED panel, GPIO CSRs. |
-| **[`kernel-gpio-v2`](https://github.com/flyboy-byte/riscv-pico/releases/tag/kernel-gpio-v2)** | **Current kernel + rootfs** — sysfs GPIO, writable root, `libgpiod`, working `sleep`. |
-| **[`apps-v2`](https://github.com/flyboy-byte/riscv-pico/releases/tag/apps-v2)** | **Current apps** — `basic`, `lua`, `gpiotest`, `libgpiod` CLI tools. |
+| **[`sdcard-v1`](https://github.com/flyboy-byte/riscv-pico/releases/tag/sdcard-v1)** | **Current SD card image.** No-network kernel; rootfs with Lua, c4, BASIC and examples. Harness-verified, first hardware boot pending. |
+| **[`pico-rv32ima-boards-v5`](https://github.com/flyboy-byte/riscv-pico/releases/tag/pico-rv32ima-boards-v5)** | **Current firmware**, all four boards — 16 MB two-chip, VGA, PS/2, OLED panel, GPIO CSRs. |
 | [`toolchain-v2`](https://github.com/flyboy-byte/riscv-pico/releases/tag/toolchain-v2) | The cross-compiler, wchar-enabled (needed for nano/ncurses). |
 | [`rv32harness-v1`](https://github.com/flyboy-byte/riscv-pico/releases/tag/rv32harness-v1) | Desktop harness binaries, x86-64 Linux. |
-| [`apps-v1`](https://github.com/flyboy-byte/riscv-pico/releases/tag/apps-v1) | `nano` and `sysinfo` (still current). Everything else superseded by `apps-v2`. |
-| [`net-v1`](https://github.com/flyboy-byte/riscv-pico/releases/tag/net-v1) | TCP/IP stack and second HVC channel. Still the networking reference. |
+| [`kernel-gpio-v2`](https://github.com/flyboy-byte/riscv-pico/releases/tag/kernel-gpio-v2) | Previous kernel + rootfs, with networking. Hardware-verified. |
+| [`net-v1`](https://github.com/flyboy-byte/riscv-pico/releases/tag/net-v1) | The networking reference: TCP/IP stack and the second console channel's SLIP work. |
+| [`apps-v1`](https://github.com/flyboy-byte/riscv-pico/releases/tag/apps-v1), [`apps-v2`](https://github.com/flyboy-byte/riscv-pico/releases/tag/apps-v2) | Older loose binaries. Everything current is in `sdcard-v1`. |
 
 Older firmware `-v3`/`-v4` still boot fine. `-v1`/`-v2` are superseded single-chip 8 MB builds that
 don't boot the current rootfs.
@@ -347,8 +464,12 @@ don't boot the current rootfs.
 | --- | --- | --- |
 | `harness/` | *this repo* | Desktop build of the real emulator core, plus a PyQt6 terminal app to drive it. |
 | `firmware/` | *this repo* | `build.sh` — one command, `.uf2`s for all four board targets. |
-| `apps/` | *this repo* | Small C programs cross-compiled for the target and proven running on it. |
-| `buildroot-overlay/` | *this repo* | The kernel patches that create every custom device — block, GPIO, second console. |
+| `apps/` | *this repo* | Programs for the target: Tiny BASIC, the Lua `sys` extension, examples. |
+| `apps/c4/` | [rswier](https://github.com/rswier/c4) via [tvlad1234](https://github.com/tvlad1234/c4) | The on-device C compiler, with `for` and `write` added here. GPL-2.0. |
+| `buildroot-overlay/` | *this repo* | Kernel config and the patches that create every custom device — block, GPIO, second console. |
+| `site/` | *this repo* | The [website](https://flyboy-byte.github.io/riscv-pico/). Plain HTML, published to `gh-pages`. |
+| `docs/` | *this repo* | GPIO and BASIC tutorial, hardware schematic handoff notes, images. |
+| `experiments/` | *this repo* | Side quests, like a Raspberry Pi 4 pretending to be an SD card. |
 | `upstream/pico-rv32ima/` | [tvlad1234](https://github.com/tvlad1234/pico-rv32ima) | The fork this builds on. No longer pristine — the PSRAM port lives here. |
 | `upstream/pico-rv32ima/tiny-rv32ima/` | [tvlad1234](https://github.com/tvlad1234/tiny-rv32ima) | The emulator core. Also edited by the same port. |
 | `upstream/pico-linux/` | [ElectroBoy404NotFound](https://github.com/ElectroBoy404NotFound/pico-linux) | Reference only, still pristine. Source of the PSRAM port logic. |
@@ -363,6 +484,7 @@ what's next. It's far more detailed than this file.
 
 ## License
 
-This repo's own code (`harness/`, `apps/`, `firmware/`, `buildroot-overlay/`, docs) is MIT — see
-[LICENSE](LICENSE). Everything under `upstream/` keeps its original licensing (MIT / Apache-2.0 /
-BSD-3); see the `LICENSE` in each subtree.
+This repo's own code (`harness/`, `apps/`, `firmware/`, `buildroot-overlay/`, `site/`, docs) is MIT —
+see [LICENSE](LICENSE) — **except `apps/c4/`, which is GPL-2.0** like the c4 it comes from. Everything
+under `upstream/` keeps its original licensing (MIT / Apache-2.0 / BSD-3); see the `LICENSE` in each
+subtree.

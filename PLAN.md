@@ -7,6 +7,10 @@ display and its own power supply — no PC attached, no USB serial. A file was c
 and read back on that setup. Milestones: Linux on real hardware (2026-08-27), guest GPIO drives real
 pins (2026-08-29), PS/2 keyboard (2026-09-11), VGA and standalone (2026-09-14) — see "Console
 bring-up" directly below.
+
+**SD card rewritten 2026-09-14 with the no-network kernel and new apps — NOT yet booted on hardware.**
+Harness-verified only; the user will test and report. Published as the `sdcard-v1` pre-release. See
+"No-network kernel, Lua `sys`, c4" below.
 The dated milestone notes that follow are history in order; the software block describes the state as
 of 2026-08-17 and is still accurate for what it covers.
 
@@ -395,10 +399,22 @@ well-damped line rather than a ringing stub. The syncs are unterminated but run 
 60 Hz. The PS/2 clock, for comparison, is ~15 kHz and caused no trouble at all. And the failure
 mode here is loud and shows up on the first boot, so the experiment is cheap.
 
-## No-network kernel, Lua `sys`, c4 — built and harness-verified 2026-09-14, NOT yet on the card
+## No-network kernel, Lua `sys`, c4 — on the card and released 2026-09-14, NOT yet booted on hardware
 
-**Status: staged, waiting on the user's go-ahead to write the card.** Everything below was tested in
-the desktop harness against a byte-for-byte copy of the real SD card, not a stock image.
+**Status: written to the card 2026-09-14 on the user's go-ahead, and published — first hardware boot
+pending.** Everything below was tested in the desktop harness against a byte-for-byte copy of the
+real SD card, not a stock image.
+
+**Card write, verified:** the card was confirmed unchanged since the backup, then `IMAGE` and `ROOTFS`
+were replaced with the staged files (`DTB` unchanged). Afterward all three matched the staged
+checksums, `e2fsck -n` came back clean, and `lua`, `c4`, `basic`, `/root/blink.lua`, the user's
+`/root/gpio.sh` and `/lol` were all present.
+
+**Release `sdcard-v1`** (pre-release): `riscv-pico-sdcard-v1.tar.gz` holding `IMAGE`, `DTB`, `ROOTFS`
+and a `README.txt`, plus loose `lua`, `c4`, `basic` and `SHA256SUMS`. **Its rootfs is not the card's:**
+the user's personal `/root/gpio.sh` and `/lol` were removed from the release copy with `debugfs`, then
+the copy was fsck'd clean. Build dir: `~/.riscv-pico-scratch/work/release-sdcard-v1/`. The README
+quickstart now downloads this release with plain `curl`, so it works without `gh` auth.
 
 ### Kernel without networking (the kernel half of Phase 1's `plain` image)
 
