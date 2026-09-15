@@ -434,7 +434,7 @@
 <text x="524" y="58.5" fill="currentColor" font-weight="700">VBUS · 5 V from USB</text>
 <text x="478" y="58.0" font-size="9.5" text-anchor="end" fill="currentColor" opacity="0.55">40</text>
 <circle cx="494" cy="83.5" r="6" fill="none" stroke="currentColor" stroke-opacity="0.45" stroke-width="1.3"></circle>
-<text x="524" y="87.5" fill="currentColor" opacity="0.5">VSYS</text>
+<text x="524" y="87.5" fill="currentColor" opacity="0.5">VSYS · 5 V from supply</text>
 <text x="478" y="87.0" font-size="9.5" text-anchor="end" fill="currentColor" opacity="0.55">39</text>
 <circle cx="494" cy="112.5" r="6" fill="none" stroke="currentColor" stroke-opacity="0.45" stroke-width="1.3"></circle>
 <text x="524" y="116.5" fill="currentColor" opacity="0.5">GND</text>
@@ -514,7 +514,7 @@
           <tr><td><strong>microSD module</strong></td><td class="mono">CS GP0 · SCK GP2<br>MOSI GP3 · MISO GP4</td><td>MOSI and CLK cross over between the module header and the Pico. 4 to 32 GB, FAT32 only.</td></tr>
           <tr><td><strong>SSD1306 OLED</strong></td><td class="mono">SDA GP28 · SCL GP21</td><td>VCC from the separate 3.3 V supply, not pin 36. Address 0x3C, occasionally 0x3D.</td></tr>
           <tr><td><strong>PS/2 keyboard</strong></td><td class="mono">DATA GP26 · CLK GP27<br>through a BSS138 converter</td><td>5 V bus. Converter HV to the keyboard's 5 V, LV to pin 36. Meter the LV outputs before connecting.</td></tr>
-          <tr><td><strong>VGA, PCB_024</strong></td><td class="mono">VSYNC GP16 · HSYNC GP17<br>R GP18 · G GP19 · B GP20 · GND pin 23</td><td>Set the breakout to 3.3 V. Green and blue follow red as one PIO group.</td></tr>
+          <tr><td><strong>VGA, PCB_024</strong></td><td class="mono">VSYNC GP16 · HSYNC GP17<br>R GP18 · G GP19 · B GP20 · GND pin 23</td><td>Use the breakout's outer 3.3 V column. Green and blue follow red as one PIO group.</td></tr>
           <tr><td><strong>Guest GPIO</strong></td><td class="mono">lines 0–3 = GP1 · GP9 · GP15 · GP22</td><td>Series resistor on any LED. Line 0, physical pin 2, is the demo LED and appears as <span class="mono">gpio512</span>.</td></tr>
           <tr><td><strong>Guest SPI</strong></td><td class="mono">CS GP5 · SCK GP6<br>MOSI GP7 · MISO GP8</td><td>Driven by the guest through CSRs. Not spare pins, even though they look idle.</td></tr>
         </tbody>
@@ -531,7 +531,7 @@
   <g font-family="JetBrains Mono, monospace">
     <rect x="24" y="24" width="214" height="64" rx="4" fill="var(--surface-2)" stroke="currentColor" stroke-opacity="0.4" stroke-width="1.3"></rect>
     <text x="40" y="50" font-size="12.5" font-weight="700" fill="currentColor">Pico 3V3 OUT</text>
-    <text x="40" y="70" font-size="11" fill="currentColor" opacity="0.65">pin 36 · regulated from USB</text>
+    <text x="40" y="70" font-size="11" fill="currentColor" opacity="0.65">pin 36 · regulated from VSYS</text>
 
     <rect x="24" y="130" width="214" height="64" rx="4" fill="var(--surface-2)" stroke="currentColor" stroke-opacity="0.4" stroke-width="1.3"></rect>
     <text x="40" y="156" font-size="12.5" font-weight="700" fill="currentColor">MB102 supply</text>
@@ -558,7 +558,7 @@
 
     <rect x="470" y="236" width="286" height="64" rx="4" fill="var(--surface)" stroke="var(--c-k)" stroke-opacity="0.7" stroke-width="1.3"></rect>
     <text x="486" y="262" font-size="12" fill="currentColor">PS/2 keyboard VCC, brown wire</text>
-    <text x="486" y="282" font-size="11" fill="currentColor" opacity="0.65">converter HV side</text>
+    <text x="486" y="282" font-size="11" fill="currentColor" opacity="0.65">converter HV · Pico VSYS pin 39</text>
 
     <text x="390" y="332" font-size="11" fill="var(--accent)" text-anchor="middle" font-weight="700">every ground meets at one junction at the Pico · PSRAM returns on its own GND pin</text>
   </g>
@@ -585,7 +585,8 @@
           <tr><td class="state ok">WORKING</td><td><strong>Desktop harness</strong></td><td>Same kernel boots on a PC in about a second</td></tr>
           <tr><td class="state ok">WORKING</td><td><strong>SSD1306 status panel</strong></td><td>Live MIPS, uptime and RAM at 2 Hz</td></tr>
           <tr><td class="state ok">WORKING</td><td><strong>PS/2 keyboard console</strong></td><td>Verified 2026-09-11. Typed into nano on the hardware</td></tr>
-          <tr><td class="state wip">PENDING</td><td><strong>VGA console</strong></td><td>Code already compiled in and running. Breakout board ordered</td></tr>
+          <tr><td class="state ok">WORKING</td><td><strong>VGA console</strong></td><td>Verified 2026-09-14 through a PCB_0024 breakout. No firmware change</td></tr>
+          <tr><td class="state ok">WORKING</td><td><strong>Fully standalone</strong></td><td>Own keyboard, screen and power. A file edited, saved and read back with no PC attached</td></tr>
           <tr><td class="state wip">PENDING</td><td><strong>Host network bridge</strong></td><td>Guest to host works. Host to guest hits a console freeze</td></tr>
           <tr><td class="state wip">PENDING</td><td><strong>RP2350 boards</strong></td><td>Builds clean for all four targets. Never flashed</td></tr>
           <tr><td class="state no">BY CHOICE</td><td><strong>I²C, PWM and ADC for the guest</strong></td><td>Scoped on paper and deliberately not built</td></tr>
@@ -596,7 +597,7 @@
 
   <section>
     <h2>How it got here</h2>
-    <p>Roughly four weeks from a vendored checkout to a machine with a keyboard. The dates are the order things were actually proven, not planned.</p>
+    <p>Roughly four weeks from a vendored checkout to a standalone machine with its own keyboard and screen. The dates are the order things were actually proven, not planned.</p>
 
     <div class="log">
       <div class="ev"><span class="d">2026-08-15</span><span class="t"><b>Desktop harness boots to a shell.</b> The real emulator core compiled against stand-in hardware headers, so every later change could be tested without a Pico.</span></div>
@@ -607,13 +608,14 @@
       <div class="ev"><span class="d">2026-08-29</span><span class="t"><b>GPIO end to end.</b> A shell command inside the emulator lit a physical LED, through a custom CSR, the emulator, and an RP2040 pin.</span></div>
       <div class="ev"><span class="d">2026-08-29</span><span class="t"><b>A power bug found and fixed.</b> The OLED destabilised the PSRAM bus through a shared 3V3 node. Resolved with a separate supply and a single-point ground tie, which has been the template for every peripheral since.</span></div>
       <div class="ev peak"><span class="d">2026-09-11</span><span class="t"><b>PS/2 keyboard works.</b> First real keyboard input to the emulated machine, with no firmware change needed. The driver was already compiled in and feeding the shared input queue.</span></div>
+      <div class="ev peak"><span class="d">2026-09-14</span><span class="t"><b>VGA works, and the machine stands alone.</b> Six jumpers to a breakout board, first picture on the first boot. Then USB unplugged, power from its own supply, and a file written in nano, saved and read back with no computer anywhere.</span></div>
     </div>
   </section>
 
   <section>
     <h2>What's next</h2>
     <ul>
-      <li><strong>VGA console.</strong> A breakout board arrives around 2026-09-14. The code has been compiled in and driving those pins into open air for weeks, so this is six jumpers and no firmware change. That makes the machine self-hosted: keyboard in, display out, no laptop in the loop.</li>
+      <li><strong>Terminal size on the VGA console.</strong> nano does not wrap on the 53×30 screen, most likely because the guest still assumes an 80×24 terminal. A one-line <span class="mono">stty</span> fix is the candidate and has not been tried yet.</li>
       <li><strong>The host network bridge.</strong> Guest to host byte transfer works. The other direction hits an unresolved console freeze, and that bug is written up rather than guessed at.</li>
       <li><strong>RP2350.</strong> Four board targets build clean. None have been flashed, so the claim stays marked unverified.</li>
     </ul>
@@ -639,7 +641,7 @@
   </section>
 
   <footer>
-    <p>github.com/flyboy-byte/riscv-pico · MIT · last verified on hardware 2026-09-11</p>
+    <p>github.com/flyboy-byte/riscv-pico · MIT · last verified on hardware 2026-09-14</p>
     <p>State of record is PLAN.md. Build outputs ship as releases rather than committed binaries.</p>
   </footer>
 

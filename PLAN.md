@@ -2,9 +2,11 @@
 
 Living state document. Current reality, not a task list.
 
-**Status: self-contained console coming up (reconciled 2026-09-12).** Linux boots on real hardware
-(2026-08-27), guest GPIO drives real pins (2026-08-29), and a PS/2 keyboard works (2026-09-11). VGA is
-the last piece, waiting on a breakout board due ~2026-09-14 — see "Console bring-up" directly below.
+**Status: FULLY STANDALONE (2026-09-14).** The Pico runs Linux with its own PS/2 keyboard, its own VGA
+display and its own power supply — no PC attached, no USB serial. A file was created in nano, saved
+and read back on that setup. Milestones: Linux on real hardware (2026-08-27), guest GPIO drives real
+pins (2026-08-29), PS/2 keyboard (2026-09-11), VGA and standalone (2026-09-14) — see "Console
+bring-up" directly below.
 The dated milestone notes that follow are history in order; the software block describes the state as
 of 2026-08-17 and is still accurate for what it covers.
 
@@ -43,7 +45,42 @@ one, a different scale of problem than "usually works." Full writeup, working co
 honest ceiling in [`experiments/pi4-sdcard-emulator/README.md`](experiments/pi4-sdcard-emulator/README.md).
 Paused here — SD card takes over once it arrives.
 
-## Console bring-up — PS/2 WORKING (2026-09-11), VGA waiting on a breakout board
+## Console bring-up — PS/2 WORKING (2026-09-11), VGA WORKING and standalone (2026-09-14)
+
+### VGA works, and the machine runs standalone — verified 2026-09-14
+
+**First picture on the monitor, first boot.** Serial Wombat PCB_0024 breakout, six jumpers from its
+outer (3.3 V) header column to GP16-20 plus ground on pin 23, everything on **one breadboard**. No
+firmware change, exactly as predicted: `CONSOLE_VGA` had been compiled in and running for weeks.
+PSRAM passed at boot with VGA wired — the feared 62.5 MHz crosstalk onto the 20 MHz PSRAM bus did not
+show up, so the second breadboard was never needed.
+
+**Then fully standalone.** Pico powered from the USB-C breadboard supply's **5 V rail into VSYS
+(pin 39)** instead of from a PC — not 3.3 V into pin 36, which is the regulator's *output*. The
+onboard regulator still makes 3V3, so PSRAM keeps its quiet rail and the split-supply layout is
+unchanged. With USB unplugged there is no serial console at all; it booted fine anyway, and the user
+created a text file in GNU nano on the VGA screen with the PS/2 keyboard, saved it, and `cat`ed it
+back. Keyboard in, display out, own power: the standalone machine this project was aiming at.
+
+**The breakout, read off its silkscreen** (so the pinout doesn't need re-deriving):
+
+| Part of the board | What it is |
+| --- | --- |
+| Outer header column, B/G/R/H/V | **3.3 V input — use this one.** 270 Ω on colours, 68 Ω on syncs |
+| Inner header column, B/G/R/H/V | 5 V input. 470 Ω on colours, 68 Ω on syncs |
+| 2-pin header top right | GND |
+| Five round pads along the top | Spare DE-15 pins 15, 12, 11, 9, 4 — leave unconnected (9 can carry 5 V) |
+| Solder jumpers on the back | Short R/G/B together for one-wire black and white — leave open |
+
+Reading the column bottom to top, V/H/R/G/B maps onto GP16-20 in order, so the jumpers run parallel
+with no crossings. The one gap on the Pico side, physical pin 23, is ground.
+
+**Known issue, not yet fixed: nano doesn't wrap on the VGA console.** The VGA terminal is **53×30**
+(320×240 at a 6×8 font, `vga.h`). Most likely the guest tty still assumes 80×24, so nano draws past
+the right edge. Candidate fix, **untested**: `stty cols 53 rows 30` on the VGA console before
+starting nano, then a shell profile line if it works. Separately, the VGA terminal emulator in
+`terminal.c` only implements CSI `J`, `K`, `H` and `m`, so full-screen redraws that use other escape
+sequences may still render imperfectly even at the right size.
 
 **Status: the PS/2 keyboard works, verified on real hardware 2026-09-11.** Typed into GNU nano
 running in guest Linux over the keyboard, with output on the USB serial console. First real
@@ -127,7 +164,9 @@ breadboard, the other soldered to the wire, heatshrunk). Keep that trick in mind
 projects, but it is moot here.
 
 **Independent corroboration of the resistor values:** Serial Wombat's own VGA documentation
-specifies **100 Ω on the syncs and 280 Ω on R/G/B**. The values computed below from the
+specifies **100 Ω on the syncs and 280 Ω on R/G/B**. **[Corrected 2026-09-14 from the board's own
+silkscreen: the 3.3 V column actually carries 270 Ω on R/G/B and 68 Ω on the syncs; the 5 V column
+carries 470 Ω and 68 Ω. The 280/100 figures came from Serial Wombat's 18AB VGA docs, not this board.]** The values computed below from the
 0.7 V-into-75 Ω spec are 279 Ω and 100 Ω. Agreement from a completely separate source, so the
 numbers in this section are right and the board's fitted resistors will behave the same way.
 
@@ -525,7 +564,8 @@ rather than deleted.
   `Image` 2.2 MB, `dtb` 2 KB, `rootfs` 60 MB ext2).
 - ~~❌ Nothing flashed to hardware yet — **parked, don't pick back up without being asked.**~~
   **Superseded 2026-08-27: Linux boots on real hardware** (16 MB, SD, shell). Guest GPIO lit a real
-  LED 2026-08-29; PS/2 keyboard working 2026-09-11. D-005 is retired — see D-008.
+  LED 2026-08-29; PS/2 keyboard working 2026-09-11; VGA working and fully standalone 2026-09-14.
+  D-005 is retired — see D-008.
 - ✅ Multi-chip PSRAM port — `pico-linux`'s address-based chip-select logic ported into
   `pico-rv32ima`. Compiles clean for real RP2040 target in both 1-chip and 2-chip configs; default
   config unchanged (1 chip, 8 MB) at the time. **Default is now 2 chips / 16 MB**, hardware-verified
@@ -544,9 +584,9 @@ Reconciled 2026-09-12.
 | SSD1306 128×64 OLED, I²C | Running as the status panel, default-on since `boards-v4` |
 | BSS138 4-channel logic level converter | In use for PS/2 since 2026-09-11 |
 | PS/2 keyboard (two on hand), perfboard breakout | Working 2026-09-11. Wire map in "Console bring-up" |
-| MB102 breadboard supply | Powers SD, OLED and the keyboard, single-point ground tie |
-| Monitor + uncut VGA cable | On hand |
-| Serial Wombat PCB_024 VGA breakout | Ordered 2026-09-12, due ~2026-09-14 |
+| USB-C breadboard supply (Lonely Binary, MB102-style) | 5 V rail: Pico via VSYS pin 39, and the keyboard. 3.3 V rail: SD and OLED. Single-point ground tie |
+| Monitor + uncut VGA cable | In use since 2026-09-14 |
+| Serial Wombat PCB_0024 VGA breakout | Working 2026-09-14. Outer header column is the 3.3 V input |
 | ST7735 128×160 LCD | **Unconfirmed.** Listed here 2026-08-15, but the 2026-08-27 "ST7735 port" note says it is not on hand. Never ported either way |
 
 Previous attempt (Sept 2024) got as far as installing the SDK and configuring a build, then
@@ -630,8 +670,8 @@ Ordered so the risky unknowns resolve first and nothing depends on the display w
      which is the agreed 6-phase plan covering the guest-driven panel, the `plain` no-network
      image, the A/B firmware split and the glyph-grid refactor.
    - **VGA + PS/2 keyboard** — **zero new code**, `CONSOLE_VGA` is already on. **PS/2 half DONE
-     2026-09-11.** VGA half waits on a Serial Wombat PCB_024 breakout (resistors fitted, ordered
-     2026-09-12), which replaces the "3× 330 Ω" plan. This is the real standalone milestone. Current
+     2026-09-11.** VGA half **DONE 2026-09-14**, and the machine runs standalone, on a Serial Wombat PCB_024 breakout
+     (resistors fitted, ordered 2026-09-12), which replaces the "3× 330 Ω" plan. This is the real standalone milestone. Current
      detail is in "Console bring-up" at the top of this file.
    - **ST7735 console** — needs a pin reassignment first, it is *not* a drop-in; display is not
      currently on hand.
@@ -694,7 +734,7 @@ Scoped on paper, **nothing built.** Two separate paths, complementary rather tha
 
 > **Update 2026-09-12:** both halves are now built or in hand. The SSD1306 panel runs on hardware
 > (default-on since `boards-v4`) and the PS/2 keyboard works (2026-09-11). VGA waits on a PCB_024
-> breakout. The 330 Ω figure below is superseded by 270–280 Ω, and the two consoles run together
+> breakout. The 330 Ω figure below is superseded by 270 Ω, and the two consoles run together
 > rather than as alternatives. See "Console bring-up" at the top of this file.
 
 #### VGA + PS/2 keyboard — already in the firmware, needs parts only

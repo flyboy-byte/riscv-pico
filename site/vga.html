@@ -235,13 +235,13 @@
     <div class="status">
       <span class="pill"><span class="dot on"></span>PS/2 keyboard · verified 2026-09-11</span>
       <span class="pill"><span class="dot on"></span>OLED status panel · running</span>
-      <span class="pill"><span class="dot pending"></span>VGA · PCB_024 ordered, ETA 2026-09-14</span>
+      <span class="pill"><span class="dot on"></span>VGA · working 2026-09-14, standalone</span>
     </div>
   </header>
 
   <section>
     <h2>Six jumpers</h2>
-    <p>The breakout is passive. A DE-15 socket on one end, labelled headers on the other, and the series resistors already fitted with values selectable for 3.3 V or 5 V. An ordinary VGA cable plugs in whole, so none of the conductor identification that a cut cable demands applies here.</p>
+    <p>The breakout is passive. A DE-15 socket on one end, labelled headers on the other, and the series resistors already fitted in two header columns, one for 3.3 V logic and one for 5 V. An ordinary VGA cable plugs in whole, so none of the conductor identification that a cut cable demands applies here.</p>
 
     <div class="tbl-scroll">
       <table>
@@ -249,11 +249,11 @@
           <tr><th>Breakout header</th><th>Signal</th><th>On-board R</th><th>Pico GPIO</th><th>Pico pin</th></tr>
         </thead>
         <tbody>
-          <tr><td class="num">R</td><td><span class="chip r">RED</span></td><td class="num">280 Ω</td><td class="num">GP18</td><td class="num">24</td></tr>
-          <tr><td class="num">G</td><td><span class="chip g">GREEN</span></td><td class="num">280 Ω</td><td class="num">GP19</td><td class="num">25</td></tr>
-          <tr><td class="num">B</td><td><span class="chip b">BLUE</span></td><td class="num">280 Ω</td><td class="num">GP20</td><td class="num">26</td></tr>
-          <tr><td class="num">HSYNC</td><td><span class="chip s">HSYNC</span></td><td class="num">100 Ω</td><td class="num">GP17</td><td class="num">22</td></tr>
-          <tr><td class="num">VSYNC</td><td><span class="chip s">VSYNC</span></td><td class="num">100 Ω</td><td class="num">GP16</td><td class="num">21</td></tr>
+          <tr><td class="num">R</td><td><span class="chip r">RED</span></td><td class="num">270 Ω</td><td class="num">GP18</td><td class="num">24</td></tr>
+          <tr><td class="num">G</td><td><span class="chip g">GREEN</span></td><td class="num">270 Ω</td><td class="num">GP19</td><td class="num">25</td></tr>
+          <tr><td class="num">B</td><td><span class="chip b">BLUE</span></td><td class="num">270 Ω</td><td class="num">GP20</td><td class="num">26</td></tr>
+          <tr><td class="num">H</td><td><span class="chip s">HSYNC</span></td><td class="num">68 Ω</td><td class="num">GP17</td><td class="num">22</td></tr>
+          <tr><td class="num">V</td><td><span class="chip s">VSYNC</span></td><td class="num">68 Ω</td><td class="num">GP16</td><td class="num">21</td></tr>
           <tr><td class="num">GND</td><td><span class="chip gnd">GROUND</span></td><td class="num">—</td><td class="num">GND</td><td class="num">23</td></tr>
         </tbody>
       </table>
@@ -262,11 +262,11 @@
     <p>Ground on physical pin 23 sits between HSYNC and Red in the header, so that tie is one short jumper rather than a reach across the board.</p>
 
     <div class="note">
-      <span class="label">Set it for 3.3 V before anything else</span>
-      The voltage selection is the only setting on the board, and the Pico is a 3.3 V part. Picking the 5 V resistor values would leave the picture dim rather than damage anything, but it is the one thing to check first because it is easy to forget once the board is buried in jumpers.
+      <span class="label">Use the outer header column</span>
+      The board has two header columns carrying the same five signals. The inner column, nearest the resistors, is sized for 5 V logic. The outer column is the 3.3 V input and is the one the Pico wants. Ground is the separate two-pin header at the top. The five round pads along the top edge are spare DE-15 pins 15, 12, 11, 9 and 4 and stay unconnected, since pin 9 can carry 5 V from a monitor. Leave the solder jumpers on the back open: bridging them ties red, green and blue together for one-wire black and white.
     </div>
 
-    <p>The fitted values are worth noting as corroboration. Serial Wombat specifies 280 Ω on the colour lines and 100 Ω on the syncs. Computing from the VGA spec independently, a 0.7 V peak into a 75 Ω terminated input from a 3.3 V pin needs <span class="mono">(3.3 × 75 / 0.7) − 75 = 279 Ω</span>. Two separate derivations landing in the same place is a good sign the board will behave.</p>
+    <p>The fitted values check out against the spec. The 3.3 V column carries 270 Ω on the colour lines and 68 Ω on the syncs. A 0.7 V peak into a 75 Ω terminated input from a 3.3 V pin needs <span class="mono">(3.3 × 75 / 0.7) − 75 = 279 Ω</span>, so 270 Ω sits a touch bright of nominal. The inner 5 V column uses 470 Ω, against 461 Ω from the same formula.</p>
   </section>
 
   <section>
@@ -306,7 +306,7 @@
               <text x="196" y="104" text-anchor="end" stroke="none">GP18 · pin 24</text>
               <line x1="206" y1="100" x2="292" y2="100" stroke-width="1.6" marker-end="url(#ar-r)"></line>
               <rect x="326" y="91" width="56" height="18" rx="2" fill="none" stroke-width="1.6"></rect>
-              <text x="354" y="104" text-anchor="middle" stroke="none" font-size="10">280Ω</text>
+              <text x="354" y="104" text-anchor="middle" stroke="none" font-size="10">270Ω</text>
               <text x="396" y="104" stroke="none" font-size="11">R</text>
             </g>
 
@@ -314,7 +314,7 @@
               <text x="196" y="142" text-anchor="end" stroke="none">GP19 · pin 25</text>
               <line x1="206" y1="138" x2="292" y2="138" stroke-width="1.6" marker-end="url(#ar-g)"></line>
               <rect x="326" y="129" width="56" height="18" rx="2" fill="none" stroke-width="1.6"></rect>
-              <text x="354" y="142" text-anchor="middle" stroke="none" font-size="10">280Ω</text>
+              <text x="354" y="142" text-anchor="middle" stroke="none" font-size="10">270Ω</text>
               <text x="396" y="142" stroke="none" font-size="11">G</text>
             </g>
 
@@ -322,7 +322,7 @@
               <text x="196" y="180" text-anchor="end" stroke="none">GP20 · pin 26</text>
               <line x1="206" y1="176" x2="292" y2="176" stroke-width="1.6" marker-end="url(#ar-b)"></line>
               <rect x="326" y="167" width="56" height="18" rx="2" fill="none" stroke-width="1.6"></rect>
-              <text x="354" y="180" text-anchor="middle" stroke="none" font-size="10">280Ω</text>
+              <text x="354" y="180" text-anchor="middle" stroke="none" font-size="10">270Ω</text>
               <text x="396" y="180" stroke="none" font-size="11">B</text>
             </g>
 
@@ -330,7 +330,7 @@
               <text x="196" y="222" text-anchor="end" stroke="none">GP17 · pin 22</text>
               <line x1="206" y1="218" x2="292" y2="218" stroke-width="1.4" marker-end="url(#ar)"></line>
               <rect x="326" y="209" width="56" height="18" rx="2" fill="none" stroke-width="1.4"></rect>
-              <text x="354" y="222" text-anchor="middle" stroke="none" font-size="10">100Ω</text>
+              <text x="354" y="222" text-anchor="middle" stroke="none" font-size="10">68Ω</text>
               <text x="396" y="222" stroke="none" font-size="11">HSYNC</text>
             </g>
 
@@ -338,7 +338,7 @@
               <text x="196" y="260" text-anchor="end" stroke="none">GP16 · pin 21</text>
               <line x1="206" y1="256" x2="292" y2="256" stroke-width="1.4" marker-end="url(#ar)"></line>
               <rect x="326" y="247" width="56" height="18" rx="2" fill="none" stroke-width="1.4"></rect>
-              <text x="354" y="260" text-anchor="middle" stroke="none" font-size="10">100Ω</text>
+              <text x="354" y="260" text-anchor="middle" stroke="none" font-size="10">68Ω</text>
               <text x="396" y="260" stroke="none" font-size="11">VSYNC</text>
             </g>
 
@@ -357,7 +357,7 @@
           <text x="587" y="176" font-family="JetBrains Mono, monospace" font-size="10.5" fill="currentColor" opacity="0.55" text-anchor="middle">uncut cable</text>
           <text x="660" y="192" font-family="JetBrains Mono, monospace" font-size="12" fill="currentColor">monitor</text>
 
-          <text x="404" y="360" font-family="JetBrains Mono, monospace" font-size="10.5" fill="currentColor" opacity="0.55" text-anchor="middle">set the board for 3.3 V, not 5 V</text>
+          <text x="404" y="360" font-family="JetBrains Mono, monospace" font-size="10.5" fill="currentColor" opacity="0.55" text-anchor="middle">outer header column = 3.3 V input</text>
         </svg>
       </div>
       <figcaption>Six jumpers in on the left, one ordinary cable out on the right. The resistors live on the breakout rather than beside the Pico, which is the trade the board makes: slightly more wire carrying a sharp edge, in exchange for no soldering and no cable dissection.</figcaption>
@@ -421,7 +421,7 @@
   <section>
     <h2>Bring-up order</h2>
     <ol class="steps">
-      <li><strong>Set the board for 3.3 V.</strong> Only setting on it, and easy to forget once it is buried in jumpers.</li>
+      <li><strong>Use the outer 3.3 V header column.</strong> The inner column is sized for 5 V and gives a dim picture.</li>
       <li>Six jumpers from the labelled headers to GP18, GP19, GP20, GP17, GP16 and a ground.</li>
       <li>Keep the bundle out to the right edge, away from GP10 to GP14 on the left. One breadboard to start with.</li>
       <li><strong>Read the boot log before looking at the monitor.</strong> If <span class="mono">initPSRAM()</span> reports −1 or −2, VGA has upset the PSRAM bus. That is the decision point for splitting onto a second breadboard or dropping <span class="mono">PSRAM_SPI_SPEED_MHZ</span>, and it is a noise problem, not a dead chip.</li>

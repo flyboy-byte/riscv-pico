@@ -2,8 +2,9 @@
 
 Guidance for Claude Code (claude.ai/code) working in this repository.
 
-**Status: running on real hardware (updated 2026-09-12).** Linux boots on the Pico with 16 MB across
-two PSRAM chips, guest GPIO drives real pins, and a PS/2 keyboard works; VGA is next. The desktop
+**Status: running standalone on real hardware (updated 2026-09-14).** Linux boots on the Pico with
+16 MB across two PSRAM chips, guest GPIO drives real pins, and a PS/2 keyboard plus VGA display let it
+run with no PC attached. The desktop
 harness (`harness/`) still boots the same kernel with no hardware. See [PLAN.md](PLAN.md) for current
 state and what's next — that's the living document, this one is orientation.
 
