@@ -458,12 +458,39 @@ or `halt`.**
 
 **Staged replacement**, ready to copy over the card's files:
 `~/.riscv-pico-scratch/work/card-staging/` — new `IMAGE`, repaired `ROOTFS` with the new `lua`,
-`/usr/bin/c4`, `/root/blink.lua` and `/root/hello.c` added, the original `DTB`, and `SHA256SUMS`.
+`/usr/bin/c4`, the new `/usr/bin/basic`, `/root/blink.lua` and the c4 examples plus `c4.c` in `/root`, the
+original `DTB`, and `SHA256SUMS`.
 
-### Lua `sys`, `blink.lua`, c4
+### Lua `sys`, `blink.lua`, c4 with `for` and `write`, BASIC `BYE`
 
-Details and build recipe are in the `apps/` section. `apps/blink.lua` is the example now on the
-staged rootfs: blinks guest GPIO line 0 (GP1, physical pin 2) through sysfs with `sys.sleep`.
+Lua details and build recipe are in the `apps/` section. `apps/blink.lua` blinks guest GPIO line 0
+(GP1, physical pin 2) through sysfs with `sys.sleep`.
+
+**c4 is now a repo app with two additions**, user's call 2026-09-14 ("add c4 write and for"):
+`apps/c4/` holds the source from `tvlad1234/c4` at `30b22b7` (GPL-2.0, its own `LICENSE`), plus a
+`for` statement and a `write` built-in. Full notes, examples and build line are in
+`apps/c4/README.md`. One claim corrected during the work: stock c4 can **not** compile the patched
+file, because the interpreter now calls `write()`; this c4 or a normal C compiler can.
+
+**BASIC gained `BYE`** (also `EXIT`, `QUIT`, `SYSTEM`) after the user reported being unable to leave
+BASIC without rebooting. `word_is` matches whole words case-insensitively, so these don't collide
+with single-letter variables (`E=5` still works). The startup banner now says `Type BYE to leave.`
+Ctrl+D at the start of a line already exited, but nothing said so.
+
+**Final harness run, no-network kernel + the staged card rootfs, all passing:**
+
+| Test | Result |
+| --- | --- |
+| `lua /root/blink.lua 2` | blinked 2 times, exit 0 |
+| `c4 /root/gpio_toggle.c` | toggled 3 times, exit 0 |
+| `c4 /root/gpio_set.c 1`, then `0` | simulated pin went high, then low |
+| `c4 /root/t_for.c` | nested, counting-down and empty `for` all correct; `write` works |
+| `c4 /root/c4.c /root/hello.c` | c4 compiled itself on the emulated CPU and ran hello, exit 0 |
+| `basic`, `PRINT 2+2`, `bye` | printed 4, returned to the shell |
+
+The staged `ROOTFS` in `~/.riscv-pico-scratch/work/card-staging/` was refreshed from this run and
+checks clean. **Lesson from this session:** a `debugfs -w` injection whose source file is missing
+fails silently if its output is filtered. Always `stat` every injected path afterward.
 
 **Publishing:** per the standing publish-builds preference, the new `Image`, `lua` and `c4` should go
 up as GitHub releases once they've run on the real card. Not done yet.

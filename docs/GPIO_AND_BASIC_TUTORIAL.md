@@ -35,7 +35,8 @@ Run any of them by name from the shell prompt.
 
 ```
 PRINT, LET, IF ... THEN, GOTO, GOSUB, RETURN, FOR ... TO ... STEP / NEXT,
-INPUT, LIST, RUN, NEW, END, REM
+INPUT, LIST, RUN, NEW, END, REM,
+BYE (also EXIT, QUIT, SYSTEM) — leave BASIC and return to the shell
 ```
 
 26 integer variables, `A`-`Z`. Line-based only — no cursor positioning.

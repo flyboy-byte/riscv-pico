@@ -527,6 +527,11 @@ static void exec_stmt(void)
     {
         do_next();
     }
+    else if (word_is("BYE") || word_is("EXIT") || word_is("QUIT") || word_is("SYSTEM"))
+    {
+        fflush(stdout);
+        exit(0);
+    }
     else if (word_is("END") || word_is("STOP"))
     {
         running = 0;
@@ -570,7 +575,7 @@ int main(void)
 {
     char line[LINE_LEN];
     printf("TINY BASIC for riscv32-nommu-uclibc\n");
-    printf("READY\n");
+    printf("Type BYE to leave.\nREADY\n");
     for (;;)
     {
         if (!fgets(line, sizeof(line), stdin))
