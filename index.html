@@ -580,14 +580,14 @@
         <tbody>
           <tr><td class="state ok">WORKING</td><td><strong>Linux boots on a real Pico</strong></td><td>Shell in under a minute, root mounted at 15.9 s</td></tr>
           <tr><td class="state ok">WORKING</td><td><strong>GPIO from Linux to real pins</strong></td><td>Character device and sysfs both. Verified lighting an LED</td></tr>
-          <tr><td class="state ok">WORKING</td><td><strong>Real software</strong></td><td>Tiny BASIC, Lua 5.4.7, GNU nano 7.2, sysinfo</td></tr>
+          <tr><td class="state ok">WORKING</td><td><strong>Real software</strong></td><td>Tiny BASIC, Lua 5.4.7, GNU nano 7.2, sysinfo, and minesweeper on the VGA screen</td></tr>
           <tr><td class="state ok">WORKING</td><td><strong>Custom kernel drivers</strong></td><td>Block, GPIO, second console. Real drivers, not shims</td></tr>
           <tr><td class="state ok">WORKING</td><td><strong>Desktop harness</strong></td><td>Same kernel boots on a PC in about a second</td></tr>
           <tr><td class="state ok">WORKING</td><td><strong>SSD1306 status panel</strong></td><td>Live MIPS, uptime and RAM at 2 Hz</td></tr>
           <tr><td class="state ok">WORKING</td><td><strong>PS/2 keyboard console</strong></td><td>Verified 2026-09-11. Typed into nano on the hardware</td></tr>
           <tr><td class="state ok">WORKING</td><td><strong>VGA console</strong></td><td>Through a <a href="https://www.amazon.com/Breakout-Resistors-Serial-Wombat-Arduino/dp/B0D4F7H59M">PCB_0024</a> breakout. No firmware change</td></tr>
           <tr><td class="state ok">WORKING</td><td><strong>Fully standalone</strong></td><td>Own keyboard, screen and power. A file edited, saved and read back with no PC attached</td></tr>
-          <tr><td class="state wip">PENDING</td><td><strong>Programming on the Pico</strong></td><td>Lua with sleep, c4 with for and write, BASIC with BYE. Verified in the harness on the SD image; first hardware run pending</td></tr>
+          <tr><td class="state wip">PENDING</td><td><strong>Programming on the Pico</strong></td><td>Lua with sleep and raw keyboard input, c4 with for and write, BASIC with BYE, minesweeper. Verified in the harness on the SD image; first hardware run pending</td></tr>
           <tr><td class="state no">BY CHOICE</td><td><strong>Networking on the Pico</strong></td><td>Removed from the kernel to free about 1 MB of RAM. Still in the harness networking image</td></tr>
           <tr><td class="state wip">PENDING</td><td><strong>RP2350 boards</strong></td><td>Builds clean for all four targets. Never flashed</td></tr>
           <tr><td class="state no">BY CHOICE</td><td><strong>I²C, PWM and ADC for the guest</strong></td><td>Scoped on paper and deliberately not built</td></tr>
