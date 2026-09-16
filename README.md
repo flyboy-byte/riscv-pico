@@ -401,6 +401,10 @@ You can write and run programs on the machine itself: open a file in nano, save 
 | **Tiny BASIC** | `basic` | Line-numbered BASIC. `BYE` returns to the shell. |
 | **Shell** | `sh script.sh` | busybox `hush`, not bash. |
 
+Every command for all of this is on one page in
+**[docs/CHEATSHEET.md](docs/CHEATSHEET.md)**, and the same thing is on the card at `/root/help.txt`,
+so `cat /root/help.txt` works when there's no PC attached.
+
 The examples are in `/root` on the SD image. Blinking an LED in Lua looks like this:
 
 ```lua

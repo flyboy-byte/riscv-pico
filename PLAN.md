@@ -1697,6 +1697,11 @@ verify with `ps`, not `pgrep -f` — see the process-hygiene note above).
   $GCC -mabi=ilp32 -fPIE -pie -static -march=rv32ima -Os -s -Wl,-elf2flt=-r lua.o lua_sys.o <the rest>.o -lm -o lua
   ```
   299,584 bytes of text against the old binary's 299,104; same 4096-byte stack.
+- **`docs/CHEATSHEET.md` + `/root/help.txt` (2026-09-15)** — one page of every command the machine
+  actually has: GPIO both ways, Lua and its `sys` calls, c4, BASIC, minesweeper, and the
+  system/power-off basics. The card carries a plain-text copy at `/root/help.txt` so `cat` works with
+  no PC attached, and the same file ships inside the `sdcard-v1` tarball. It also lists what busybox
+  does **not** have (`head`, `grep`, `cp`, `stty`, `vi`...), which has bitten more than one command.
 - **`mines.lua` + `sys.raw` (2026-09-15)** — minesweeper for the VGA console, the project's first
   game. `apps/mines.lua`, installed at `/root/mines.lua`. Sized for the 53x30 VGA terminal and
   restricted to the four escape sequences `terminal.c` actually implements — `ESC[2J`, `ESC[row;colH`,
