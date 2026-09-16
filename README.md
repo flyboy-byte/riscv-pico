@@ -79,11 +79,11 @@ What's actually verified, versus what merely compiles. No wishful thinking in th
 | ✅ | **Linux boots on a real Pico** | RP2040, 16 MB PSRAM, 60 MB rootfs off SD. Shell in well under a minute. |
 | ✅ | **Runs standalone** | PS/2 keyboard in, VGA out, its own power supply. Files edited and saved with no PC attached. |
 | ✅ | **GPIO from Linux → real pins** | Both `/dev/gpiochipN` (chardev + `libgpiod`) *and* `/sys/class/gpio`. Verified lighting an actual LED. |
-| ✅ | **Runs real software** | Tiny BASIC, Lua 5.4.7, GNU nano 7.2 (full-screen), `sysinfo`. |
+| ✅ | **Runs real software** | Tiny BASIC, Lua 5.4.7, GNU nano 7.2 (full-screen), `sysinfo`, and minesweeper. |
 | ✅ | **Custom kernel drivers** | Block device, GPIO, second console channel — real Linux drivers, not shims. |
 | ✅ | **Desktop harness** | Boots the same kernel on your PC in about a second. No hardware needed. |
 | ✅ | **SSD1306 OLED panel** | A live stats visualizer. Not essential, just fun. |
-| 🚧 | **Programming on the Pico** | Lua with sleep, the c4 C compiler, BASIC with an exit command. Verified in the harness on the exact SD image; first hardware run pending. |
+| 🚧 | **Programming on the Pico** | Lua with sleep and raw key input, the c4 C compiler, BASIC with an exit command, minesweeper. Verified in the harness on the exact SD image; first hardware run pending. |
 | 🚧 | **Slimmer kernel** | Networking removed, about 1 MB of RAM back. Same state as the row above. |
 | 🚧 | **`pico2` / `pico2_w` (RP2350)** | Builds clean for all four board targets. Never actually flashed. |
 | ❌ | **Networking on the Pico** | Removed on purpose for the RAM. The stack and a half-built host bridge live on in [`net-v1`](https://github.com/flyboy-byte/riscv-pico/releases/tag/net-v1). |
@@ -119,6 +119,7 @@ shell in a couple of seconds. Then try:
 | `lua /root/blink.lua 3` | Blinks GPIO line 0 three times. The harness prints each pin change |
 | `c4 /root/hello.c` | Compiles and runs C on the emulated machine |
 | `basic` | Tiny BASIC. `BYE` gets you back out |
+| `lua /root/mines.lua` | Minesweeper. Arrow keys, space digs, `f` flags, `q` quits |
 | `nano`, `sysinfo`, `gpioinfo gpiochip0` | Editor, system banner, the GPIO chip |
 
 > [!IMPORTANT]
@@ -395,7 +396,7 @@ You can write and run programs on the machine itself: open a file in nano, save 
 
 | Language | Try | Notes |
 | --- | --- | --- |
-| **Lua 5.4** | `lua blink.lua` | Adds `sys.sleep(seconds)` and `sys.ms()`, which stock Lua lacks. GPIO goes through `/sys/class/gpio`. |
+| **Lua 5.4** | `lua blink.lua` | Adds `sys.sleep(seconds)`, `sys.ms()` and `sys.raw()`, which stock Lua lacks. GPIO goes through `/sys/class/gpio`. |
 | **C, via c4** | `c4 gpio_set.c 1` | Compiles C to bytecode and interprets it. This copy adds `for` and `write`, and it can compile itself. |
 | **Tiny BASIC** | `basic` | Line-numbered BASIC. `BYE` returns to the shell. |
 | **Shell** | `sh script.sh` | busybox `hush`, not bash. |
@@ -414,6 +415,11 @@ for i = 1, 10 do
   put("/sys/class/gpio/gpio512/value", "0"); sys.sleep(0.2)
 end
 ```
+
+There's a game, too: **`lua /root/mines.lua`** is minesweeper on the VGA screen. Arrow keys move,
+space digs, `f` flags, `r` restarts, `q` quits. Board size is optional —
+`lua /root/mines.lua 20 14 40`. Single keypresses need `sys.raw()`, another call the Lua build adds;
+where that isn't available it falls back to typed commands, so it works over a pipe too.
 
 `os.execute` and `io.popen` don't work from Lua here: they need `fork()`, which a no-MMU machine
 doesn't have. Details on c4's language and limits are in

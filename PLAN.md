@@ -410,6 +410,11 @@ were replaced with the staged files (`DTB` unchanged). Afterward all three match
 checksums, `e2fsck -n` came back clean, and `lua`, `c4`, `basic`, `/root/blink.lua`, the user's
 `/root/gpio.sh` and `/lol` were all present.
 
+**Updated 2026-09-15:** the card and the `sdcard-v1` assets both now carry the `sys.raw` Lua build and
+`mines.lua`. Assets were re-uploaded with `gh release upload --clobber` rather than cutting a v2,
+since the release was hours old, still a pre-release, and never hardware-booted; the release notes say
+so.
+
 **Release `sdcard-v1`** (pre-release): `riscv-pico-sdcard-v1.tar.gz` holding `IMAGE`, `DTB`, `ROOTFS`
 and a `README.txt`, plus loose `lua`, `c4`, `basic` and `SHA256SUMS`. **Its rootfs is not the card's:**
 the user's personal `/root/gpio.sh` and `/lol` were removed from the release copy with `debugfs`, then
@@ -1692,6 +1697,19 @@ verify with `ps`, not `pgrep -f` — see the process-hygiene note above).
   $GCC -mabi=ilp32 -fPIE -pie -static -march=rv32ima -Os -s -Wl,-elf2flt=-r lua.o lua_sys.o <the rest>.o -lm -o lua
   ```
   299,584 bytes of text against the old binary's 299,104; same 4096-byte stack.
+- **`mines.lua` + `sys.raw` (2026-09-15)** — minesweeper for the VGA console, the project's first
+  game. `apps/mines.lua`, installed at `/root/mines.lua`. Sized for the 53x30 VGA terminal and
+  restricted to the four escape sequences `terminal.c` actually implements — `ESC[2J`, `ESC[row;colH`,
+  `ESC[K` and the eight `ESC[3Xm` colours. **Do not use anything else**: unknown sequences are printed
+  as literal text, so e.g. a cursor-hide `ESC[?25l` would spray `5l` on screen.
+  Single keypresses needed raw mode, and the image has no `stty`, so `apps/lua_sys.c` gained
+  `sys.raw(true/false)` — `tcgetattr`/`tcsetattr` clearing `ICANON`/`ECHO`, restoring on exit, and
+  returning false when stdin isn't a tty so callers can fall back. Guest `/dev/console` is always a
+  tty, so raw mode works in the harness even when the harness's own stdin is a pipe.
+  **Harness-verified 2026-09-15** on the card image: arrow keys moved the cursor, space dug and
+  revealed a numbered cell, `f` flagged and the counter dropped, `q` returned to the shell. Mines are
+  placed after the first dig, so the opening move can never lose. Flood fill is iterative, not
+  recursive, to keep the stack shallow on a no-MMU target.
 - **`c4` (2026-09-14)** — Robert Swierczek's "C in four functions", from `tvlad1234/c4`, a fork whose
   only change is `long` instead of `long long` so it builds for riscv32. Compiled unmodified with the
   standard flags to a 115 KB bFLT. Verified in the harness on the real card copy: compiles and runs a

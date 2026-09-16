@@ -12,7 +12,9 @@
  * the real luaL_openlibs. Build recipe is in PLAN.md's "apps/" section. */
 
 #include <errno.h>
+#include <termios.h>
 #include <time.h>
+#include <unistd.h>
 
 #include "lua.h"
 #include "lauxlib.h"
@@ -45,9 +47,51 @@ static int sys_ms(lua_State *L)
     return 1;
 }
 
+/* sys.raw(true) puts the console in key-at-a-time mode: no line buffering, no echo, so a program can
+ * read arrow keys as they're pressed. sys.raw(false) restores what was there before. Returns false if
+ * stdin isn't a terminal, e.g. when input is piped, so callers can fall back to reading whole lines.
+ * The image has no `stty`, so this is the only way to get single keypresses. */
+static struct termios saved_tty;
+static int tty_saved = 0;
+
+static int sys_raw(lua_State *L)
+{
+    int on = lua_toboolean(L, 1);
+    struct termios t;
+
+    if (!isatty(STDIN_FILENO)) {
+        lua_pushboolean(L, 0);
+        return 1;
+    }
+
+    if (on) {
+        if (tcgetattr(STDIN_FILENO, &t) != 0) {
+            lua_pushboolean(L, 0);
+            return 1;
+        }
+        if (!tty_saved) {
+            saved_tty = t;
+            tty_saved = 1;
+        }
+        t.c_lflag &= ~(ICANON | ECHO);  /* leave output processing alone, so print() still works */
+        t.c_cc[VMIN] = 1;
+        t.c_cc[VTIME] = 0;
+        if (tcsetattr(STDIN_FILENO, TCSANOW, &t) != 0) {
+            lua_pushboolean(L, 0);
+            return 1;
+        }
+    } else if (tty_saved) {
+        tcsetattr(STDIN_FILENO, TCSANOW, &saved_tty);
+    }
+
+    lua_pushboolean(L, 1);
+    return 1;
+}
+
 static const luaL_Reg sys_funcs[] = {
     {"sleep", sys_sleep},
     {"ms", sys_ms},
+    {"raw", sys_raw},
     {NULL, NULL}
 };
 
