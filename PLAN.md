@@ -8,9 +8,18 @@ and read back on that setup. Milestones: Linux on real hardware (2026-08-27), gu
 pins (2026-08-29), PS/2 keyboard (2026-09-11), VGA and standalone (2026-09-14) — see "Console
 bring-up" directly below.
 
-**SD card rewritten 2026-09-14 with the no-network kernel and new apps — NOT yet booted on hardware.**
-Harness-verified only; the user will test and report. Published as the `sdcard-v1` pre-release. See
-"No-network kernel, Lua `sys`, c4" below.
+**SD card rewritten 2026-09-14/15 with the no-network kernel and new apps — NOT yet booted on
+hardware.** Harness-verified only; the user will test and report. On the card: the no-network kernel,
+Lua with `sys.sleep`/`sys.ms`/`sys.raw`, c4 with `for` + `write`, BASIC with `BYE`, minesweeper at
+`/root/mines.lua`, and `/root/help.txt`. Published as the `sdcard-v1` pre-release, whose assets were
+re-uploaded on 09-15 to match. See "No-network kernel, Lua `sys`, c4" below, and
+`docs/CHEATSHEET.md` for the command reference.
+
+**Next session starts here:** ask how the hardware boot went. If it works, flip `sdcard-v1` out of
+pre-release and mark the `Programming on the Pico` and `Slimmer kernel` rows verified in README.md
+and `site/index.html`. Open threads, smallest first: the nano/`COLUMNS` fix on VGA (untested
+one-liner), `usleep` for c4, the busybox rootfs trim (needs the user's add/drop list), a photo of the
+standalone machine for the README, and the still-untracked `AGENTS.md`.
 The dated milestone notes that follow are history in order; the software block describes the state as
 of 2026-08-17 and is still accurate for what it covers.
 
