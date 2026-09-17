@@ -16,8 +16,8 @@ same day:
   and never released it. ~~Open~~ — FIXED 2026-09-16: blink and `gpio_toggle.c` now unexport.
   Verified in the harness: blink, then `gpioset` exits 0.
 - **nano unusable on VGA; `COLUMNS=53 LINES=30` changed nothing.** ~~Open~~ — FIXED 2026-09-16 in
-  firmware (new VT102 terminal) plus a boot-time `ttysize 30 53`. Harness-verified; **hardware run
-  pending.** See "VGA terminal rewrite" under Console bring-up.
+  firmware (new VT102 terminal) plus a boot-time `ttysize 30 53`. Verified on hardware the same
+  evening ("everything works perfect"). See "VGA terminal rewrite" under Console bring-up.
 - **"couldn't see or edit files in /sys".** The user was running `cat /sys/class/gpio/export`.
   That file is write-only, so "Permission denied" is correct. Documented in the cheat sheet and
   `help.txt`. Root is writable (`inittab` remounts it rw).
@@ -29,11 +29,14 @@ only), `help.txt`, `gpio_set.c` and `gpio_toggle.c`. Public copy without the use
 `sdcard-v2`. Firmware: `pico-rv32ima-boards-v6`. **The user still has to flash v6**: BOOTSEL, then
 copy `firmware/out/pico-rv32ima-pico.uf2`.
 
-**Next session starts here:** ask how nano on VGA went with v6 flashed. If nano works, flip the "nano on the VGA screen" row in README.md and `site/index.html`
-to verified, and take `sdcard-v2` and `boards-v6` out of pre-release. The user is working on
-README photos (strip EXIF before committing). Other open threads: `usleep` for c4, the busybox
-rootfs trim (needs the user's add/drop list), `mines.lua` still has code lines wider than 53
-columns (nano shows them with `>`), and the still-untracked `AGENTS.md`.
+~~**Next:** hardware test of v6 + card v2~~ — DONE 2026-09-16: nano on VGA, c4, BASIC `BYE` all
+verified. `sdcard-v2` and `boards-v6` taken out of pre-release. Four photos of the standalone
+machine (sysinfo, nano, BASIC + c4, minesweeper) added to the README under `docs/images/screen-*`,
+resized to 1600 px and stripped of metadata. The phone originals sit untracked in the repo root.
+
+**Next session starts here:** nothing is blocked. Open threads, pick any: `usleep` for c4 (so a c4
+blink is visible), the busybox rootfs trim (needs the user's add/drop list), `mines.lua` code lines
+wider than 53 columns, the RP2350 boards (never flashed), and the untracked `AGENTS.md`.
 The dated milestone notes that follow are history in order; the software block describes the state as
 of 2026-08-17 and is still accurate for what it covers.
 
@@ -102,7 +105,7 @@ back. Keyboard in, display out, own power: the standalone machine this project w
 Reading the column bottom to top, V/H/R/G/B maps onto GP16-20 in order, so the jumpers run parallel
 with no crossings. The one gap on the Pico side, physical pin 23, is ground.
 
-### VGA terminal rewrite — built and harness-verified 2026-09-16, hardware run pending
+### VGA terminal rewrite — VERIFIED ON HARDWARE 2026-09-16
 
 ~~Known issue: nano is unusable on the VGA console~~. ~~Candidate fix: set the size with `stty` /
 `COLUMNS=53 LINES=30`~~ — tested on hardware 2026-09-16, no effect (and `stty` isn't installed).

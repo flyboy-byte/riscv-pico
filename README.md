@@ -68,6 +68,15 @@ attached. You can write a program in nano on the Pico, run it, and have it blink
 
 <p align="center"><sub>The OLED is reporting on the machine it's plugged into: 16 MB across 2 chips, live MIPS, uptime, 400 MHz clock.</sub></p>
 
+And running on its own: PS/2 keyboard in, VGA monitor out, no PC anywhere.
+
+| | |
+|---|---|
+| <img src="docs/images/screen-sysinfo.jpg" alt="sysinfo on the VGA monitor: Linux 6.6.18 on riscv32 with no MMU, 14 MB of RAM"> | <img src="docs/images/screen-nano.jpg" alt="GNU nano editing hello.c on the VGA monitor"> |
+| `sysinfo`: Linux 6.6 on an emulated RV32, 14 MB of RAM | GNU nano editing `hello.c`, full screen |
+| <img src="docs/images/screen-helloworld.jpg" alt="Tiny BASIC printing hello world, then c4 compiling and running hello.c"> | <img src="docs/images/screen-minesweeper.jpg" alt="Minesweeper in progress on the VGA monitor"> |
+| Tiny BASIC, then c4 compiling and running that `hello.c` | Minesweeper, in Lua |
+
 ---
 
 ## Status
@@ -80,7 +89,7 @@ What's actually verified, versus what merely compiles. No wishful thinking in th
 | ✅ | **Runs standalone** | PS/2 keyboard in, VGA out, its own power supply. Files edited and saved with no PC attached. |
 | ✅ | **GPIO from Linux → real pins** | Both `/dev/gpiochipN` (chardev + `libgpiod`) *and* `/sys/class/gpio`. Verified lighting an actual LED. |
 | ✅ | **Runs real software** | Tiny BASIC, Lua 5.4.7, GNU nano 7.2 (full-screen), `sysinfo`, and minesweeper. |
-| 🚧 | **nano on the VGA screen** | Firmware v6 rewrote the VGA terminal so nano draws correctly at 53×30. It matches a reference emulator on recorded nano sessions; first hardware run pending. On v5, nano over VGA is unusable. |
+| ✅ | **nano on the VGA screen** | Firmware v6 rewrote the VGA terminal as a VT102, so nano draws correctly at 53×30. Verified on hardware. On v5, nano over VGA is unusable. |
 | ✅ | **Custom kernel drivers** | Block device, GPIO, second console channel — real Linux drivers, not shims. |
 | ✅ | **Desktop harness** | Boots the same kernel on your PC in about a second. No hardware needed. |
 | ✅ | **SSD1306 OLED panel** | A live stats visualizer. Not essential, just fun. |
@@ -457,7 +466,7 @@ Build outputs ship as GitHub releases rather than committed binaries, which keep
 
 | Release | Contents |
 | --- | --- |
-| **[`sdcard-v2`](https://github.com/flyboy-byte/riscv-pico/releases/tag/sdcard-v2)** | **Current SD card image.** No-network kernel; rootfs with Lua, c4, BASIC and examples, with the console sized for the VGA screen. v1 of it booted on hardware; v2 is harness-verified. |
+| **[`sdcard-v2`](https://github.com/flyboy-byte/riscv-pico/releases/tag/sdcard-v2)** | **Current SD card image.** No-network kernel; rootfs with Lua, c4, BASIC and examples, with the console sized for the VGA screen. Hardware-verified. |
 | **[`pico-rv32ima-boards-v6`](https://github.com/flyboy-byte/riscv-pico/releases/tag/pico-rv32ima-boards-v6)** | **Current firmware**, all four boards — 16 MB two-chip, VGA with a rewritten VT102 terminal, PS/2 with working Home/End/Delete/Page keys, OLED panel, GPIO CSRs. |
 | [`toolchain-v2`](https://github.com/flyboy-byte/riscv-pico/releases/tag/toolchain-v2) | The cross-compiler, wchar-enabled (needed for nano/ncurses). |
 | [`rv32harness-v1`](https://github.com/flyboy-byte/riscv-pico/releases/tag/rv32harness-v1) | Desktop harness binaries, x86-64 Linux. |
