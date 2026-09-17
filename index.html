@@ -139,6 +139,21 @@
   .key { display: inline-flex; align-items: center; gap: 7px; font-family: var(--f-mono); font-size: 11.5px; color: var(--muted); }
   .swatch { width: 12px; height: 12px; border-radius: 50%; flex: none; }
 
+  .links { display: flex; flex-wrap: wrap; gap: 8px 20px; font-family: var(--f-mono); font-size: 13px; }
+  .links a { font-weight: 700; }
+  .photo img { display: block; width: 100%; height: auto; border-radius: 4px; border: 1px solid var(--rule); }
+  .gallery { display: grid; grid-template-columns: repeat(2, 1fr); gap: 14px; }
+  .gallery figure { gap: 6px; }
+  .gallery img { display: block; width: 100%; height: auto; border-radius: 4px; border: 1px solid var(--rule); }
+  .cta {
+    border: 1px solid var(--rule); background: var(--surface); border-radius: 4px;
+    padding: 16px 18px; display: flex; flex-direction: column; gap: 8px; max-width: 66ch;
+  }
+  .cta .label {
+    font-family: var(--f-mono); font-size: 11px; font-weight: 700;
+    letter-spacing: 0.14em; text-transform: uppercase; color: var(--accent);
+  }
+
   .log { display: flex; flex-direction: column; gap: 0; border-top: 1px solid var(--rule); }
   .ev {
     display: grid; grid-template-columns: 104px 1fr; gap: 18px;
@@ -156,6 +171,7 @@
     body { font-size: 16px; }
     .wrap { padding-block: 30px 60px; }
     .ev { grid-template-columns: 1fr; gap: 4px; }
+    .gallery { grid-template-columns: 1fr; }
   }
 
   footer { margin-top: 64px; padding-top: 20px; border-top: 1px solid var(--rule); display: flex; flex-direction: column; gap: 8px; }
@@ -203,7 +219,35 @@
       <div class="stat"><span class="v">400 MHz</span><span class="k">Overclocked</span></div>
       <div class="stat"><span class="v">~$20</span><span class="k">Parts cost</span></div>
     </div>
+
+    <nav class="links" aria-label="Project links">
+      <a href="https://github.com/flyboy-byte/riscv-pico">Source on GitHub</a>
+      <a href="https://github.com/flyboy-byte/riscv-pico#build-one-yourself">Build your own</a>
+      <a href="https://github.com/flyboy-byte/riscv-pico/releases">Downloads</a>
+      <a href="vga.html">VGA wiring card</a>
+    </nav>
   </header>
+
+  <section>
+    <h2>The short story</h2>
+    <p>It started as a question: could a Raspberry Pi Pico, a $4 board with about a quarter of a megabyte of RAM, run real Linux? Two open-source projects had already proved it could, with a RISC-V emulator running on the Pico itself. This project took their work, combined the best parts of both, and kept going until the Pico didn't need a computer at all.</p>
+    <figure class="photo">
+      <img src="img/breadboard.jpg" alt="The build on a breadboard: a Pico, two PSRAM chips on adapter boards, an SD card module, and an OLED showing live stats" loading="lazy">
+      <figcaption>The whole machine on one breadboard. The OLED reports on the computer it's plugged into: 16 MB across two chips, live speed, uptime.</figcaption>
+    </figure>
+    <p>Most of the build was one fight at a time. The desktop harness came first, so the software could be tested before any soldering. Then two hand-soldered memory chips, and a first boot to a Linux shell. Then Linux switching a real LED on and off. Then a stubborn crash that turned out to be power, not code. A PS/2 keyboard needed only wiring and a level converter, no code. A VGA cable from Home Depot and a small breakout board gave it a screen. Then the USB cable came out, and the Pico kept running on its own.</p>
+    <div class="gallery">
+      <figure><img src="img/screen-sysinfo.jpg" alt="sysinfo on a VGA monitor: Linux 6.6.18 on riscv32 with no MMU" loading="lazy"><figcaption>Linux 6.6 on an emulated RISC-V CPU, 14 MB of RAM.</figcaption></figure>
+      <figure><img src="img/screen-nano.jpg" alt="GNU nano editing hello.c on the VGA monitor" loading="lazy"><figcaption>GNU nano, full screen, on the Pico's own VGA output.</figcaption></figure>
+      <figure><img src="img/screen-helloworld.jpg" alt="Tiny BASIC printing hello world, then the c4 compiler running hello.c" loading="lazy"><figcaption>BASIC, then a C compiler running a C program, all on the Pico.</figcaption></figure>
+      <figure><img src="img/screen-minesweeper.jpg" alt="A game of minesweeper on the VGA monitor" loading="lazy"><figcaption>Minesweeper in Lua, because it needed a game.</figcaption></figure>
+    </div>
+    <p>The last fix is typical of the whole project. nano, the text editor, worked fine over USB but was unusable on the VGA screen. The screen code only understood four of the commands nano sends. It was replaced with a proper VT102 terminal emulator, tested on a PC against recordings of real nano sessions, and worked on the real screen that same evening.</p>
+    <div class="cta">
+      <span class="label">Build your own</span>
+      <p>About $20 of parts, no compiler needed. The <a href="https://github.com/flyboy-byte/riscv-pico#build-one-yourself">README</a> has the parts list, the wiring, and step-by-step flashing and first boot. The firmware and SD card image are prebuilt on the <a href="https://github.com/flyboy-byte/riscv-pico/releases">releases page</a>.</p>
+    </div>
+  </section>
 
   <section>
     <h2>What it is</h2>
@@ -617,7 +661,10 @@
 
   <section>
     <h2>What's next</h2>
+    <p>The project is on hold, and it counts as done for now. Ideas for whenever it picks back up:</p>
     <ul>
+      <li><strong>A perfboard build.</strong> The same circuit, soldered down, with no flying jumpers.</li>
+      <li><strong>A 3D-printed enclosure</strong> around that board.</li>
       <li><strong>RP2350.</strong> Four board targets build clean. None have been flashed, so the claim stays marked unverified.</li>
     </ul>
     <p>Explicitly not on the list: turning this into a framework, a build system, or a general-purpose emulator project. It is a bring-up and porting workbench and the scope fence is written into the repo.</p>
@@ -643,8 +690,8 @@
   </section>
 
   <footer>
-    <p>github.com/flyboy-byte/riscv-pico · MIT · last verified on hardware 2026-09-14</p>
-    <p>State of record is PLAN.md. Build outputs ship as releases rather than committed binaries.</p>
+    <p><a href="https://github.com/flyboy-byte/riscv-pico">github.com/flyboy-byte/riscv-pico</a> · MIT · last verified on hardware 2026-09-16</p>
+    <p>State of record is <a href="https://github.com/flyboy-byte/riscv-pico/blob/main/PLAN.md">PLAN.md</a>. Firmware and SD card images are on the <a href="https://github.com/flyboy-byte/riscv-pico/releases">releases page</a>.</p>
   </footer>
 
 </div>
