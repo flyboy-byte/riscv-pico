@@ -586,8 +586,9 @@
           <tr><td class="state ok">WORKING</td><td><strong>SSD1306 status panel</strong></td><td>Live MIPS, uptime and RAM at 2 Hz</td></tr>
           <tr><td class="state ok">WORKING</td><td><strong>PS/2 keyboard console</strong></td><td>Verified 2026-09-11. Typed into nano on the hardware</td></tr>
           <tr><td class="state ok">WORKING</td><td><strong>VGA console</strong></td><td>Through a <a href="https://www.amazon.com/Breakout-Resistors-Serial-Wombat-Arduino/dp/B0D4F7H59M">PCB_0024</a> breakout. No firmware change</td></tr>
+          <tr><td class="state wip">PENDING</td><td><strong>nano on the VGA screen</strong></td><td>Firmware v6 rewrote the VGA terminal as a VT102 and sizes the console to 53×30. Matches a reference emulator on recorded nano sessions; first hardware run pending</td></tr>
           <tr><td class="state ok">WORKING</td><td><strong>Fully standalone</strong></td><td>Own keyboard, screen and power. A file edited, saved and read back with no PC attached</td></tr>
-          <tr><td class="state wip">PENDING</td><td><strong>Programming on the Pico</strong></td><td>Lua with sleep and raw keyboard input, c4 with for and write, BASIC with BYE, minesweeper. Verified in the harness on the SD image; first hardware run pending</td></tr>
+          <tr><td class="state ok">WORKING</td><td><strong>Programming on the Pico</strong></td><td>Verified 2026-09-16: Lua with sleep, GPIO from Lua and the shell, minesweeper. c4 and BASIC's BYE not yet reported from hardware</td></tr>
           <tr><td class="state no">BY CHOICE</td><td><strong>Networking on the Pico</strong></td><td>Removed from the kernel to free about 1 MB of RAM. Still in the harness networking image</td></tr>
           <tr><td class="state wip">PENDING</td><td><strong>RP2350 boards</strong></td><td>Builds clean for all four targets. Never flashed</td></tr>
           <tr><td class="state no">BY CHOICE</td><td><strong>I²C, PWM and ADC for the guest</strong></td><td>Scoped on paper and deliberately not built</td></tr>
@@ -610,14 +611,15 @@
       <div class="ev"><span class="d">2026-08-29</span><span class="t"><b>A power bug found and fixed.</b> The OLED destabilised the PSRAM bus through a shared 3V3 node. Resolved with a separate supply and a single-point ground tie, which has been the template for every peripheral since.</span></div>
       <div class="ev peak"><span class="d">2026-09-11</span><span class="t"><b>PS/2 keyboard works.</b> First real keyboard input to the emulated machine, with no firmware change needed. The driver was already compiled in and feeding the shared input queue.</span></div>
       <div class="ev peak"><span class="d">2026-09-14</span><span class="t"><b>VGA works, and the machine stands alone.</b> Six jumpers to a breakout board, first picture on the first boot. Then USB unplugged, power from its own supply, and a file written in nano, saved and read back with no computer anywhere.</span></div>
+      <div class="ev"><span class="d">2026-09-16</span><span class="t"><b>Programs written on the machine run on the machine.</b> The no-network kernel booted on hardware; Lua blinked an LED and minesweeper played on the VGA screen. The same test showed nano was unusable over VGA: the terminal code understood four escape sequences. It was rewritten as a VT102 that same day.</span></div>
     </div>
   </section>
 
   <section>
     <h2>What's next</h2>
     <ul>
-      <li><strong>Terminal size on the VGA console.</strong> nano does not wrap on the 53×30 screen, most likely because the guest still assumes an 80×24 terminal. A one-line <span class="mono">stty</span> fix is the candidate and has not been tried yet.</li>
-      <li><strong>First hardware run of the new SD image.</strong> The no-network kernel, Lua's sleep, c4 with <span class="mono">for</span> and <span class="mono">write</span>, and BASIC's exit command have only run in the desktop harness so far.</li>
+      <li><strong>nano on the VGA screen, on hardware.</strong> Firmware v6's new terminal passes every recorded nano session on the desktop. It needs a run on the real screen.</li>
+      <li><strong>c4 and BASIC on hardware.</strong> Both are on the card and work in the harness, but nobody has reported running them on the Pico yet.</li>
       <li><strong>RP2350.</strong> Four board targets build clean. None have been flashed, so the claim stays marked unverified.</li>
     </ul>
     <p>Explicitly not on the list: turning this into a framework, a build system, or a general-purpose emulator project. It is a bring-up and porting workbench and the scope fence is written into the repo.</p>
