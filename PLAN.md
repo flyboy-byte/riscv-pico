@@ -44,6 +44,11 @@ boot, troubleshooting).
 extending c4), the PS/2 pinout diagram `.webp` and the user's `ps2-pinout` wire note now live in
 `~/.riscv-pico-scratch/notes/`. The full-size phone photos are in `~/Pictures/riscv-pico/`.
 
+**Upstream checked 2026-09-16: nothing new.** `pico-rv32ima` (e6f6d1b), `tiny-rv32ima` (565440c),
+`pico-linux` (5d4eda1), `tvlad1234/c4` (30b22b7) and `buildroot-tiny-rv32ima` (ad36342, same as the
+local checkout) all match what is vendored here. Upstream's last commits are from 2025-08.
+`pico-rv32ima`'s `dev` branch is 19 commits behind `main`, with nothing of its own.
+
 **Next session starts here:** nothing is blocked. Open threads, pick any: `usleep` for c4 (so a c4
 blink is visible), the busybox rootfs trim (needs the user's add/drop list), `mines.lua` code lines
 wider than 53 columns, and the RP2350 boards (never flashed). Local cleanup 2026-09-16: `AGENTS.md`
