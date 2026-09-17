@@ -16,8 +16,8 @@ Line 0 of the GPIO chip is **Pico GP1, physical pin 2**. The four guest-usable l
 
 ## GPIO
 
-Two interfaces, both real Linux. Only one can hold a line at a time, so if `gpioget` says the line
-is busy, something exported it through sysfs first. Release it with:
+Two interfaces, both real Linux. Only one can hold a line at a time, so if `gpioset` or `gpioget` says
+the line is busy, something exported it through sysfs first. Release it with:
 
 ```sh
 echo 512 > /sys/class/gpio/unexport   # 513, 514, 515 for the other lines
@@ -146,10 +146,11 @@ The first dig is never a mine. Flagged cells can't be dug by accident.
 sysinfo                         # what this thing is, at a glance
 free                            # memory
 uptime
-dmesg | tail                    # boot messages... except `tail` isn't installed, so just `dmesg`
+dmesg                           # boot messages (no pipe to tail: it isn't installed)
 nano notes.txt                  # real GNU nano
 sync                            # ALWAYS before pulling power
 halt                            # cleaner still
+reboot                          # restart without pulling power
 ```
 
 **Pull the power without `sync` or `halt` and the root filesystem can be damaged.** That already
@@ -159,6 +160,9 @@ happened once and left a broken directory entry behind.
 
 `head`, `tail`, `grep`, `sed`, `awk`, `wc`, `cp`, `mv`, `chmod`, `ps`, `kill`, `date`, `stty`, `vi`,
 `df`. Busybox was trimmed to save space. Adding some back means rebuilding the rootfs.
+
+What *is* there: `cat ls echo mkdir rm sleep sync mount umount uname dmesg printf clear free uptime`,
+plus `nano lua c4 basic sysinfo ttysize gpiotest` and the `gpio*` tools.
 
 ### nano and the 53×30 screen
 
