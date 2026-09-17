@@ -40,9 +40,14 @@ the same circuit, then **a 3D-printed enclosure** for it. The website became a b
 with photos; the build guide lives in the README ("Build one yourself": six steps, SD card, first
 boot, troubleshooting).
 
+**Moved out of the repo root 2026-09-16:** `c4-pico-extension-notes.md` (the user's ChatGPT notes on
+extending c4), the PS/2 pinout diagram `.webp` and the user's `ps2-pinout` wire note now live in
+`~/.riscv-pico-scratch/notes/`. The full-size phone photos are in `~/Pictures/riscv-pico/`.
+
 **Next session starts here:** nothing is blocked. Open threads, pick any: `usleep` for c4 (so a c4
 blink is visible), the busybox rootfs trim (needs the user's add/drop list), `mines.lua` code lines
-wider than 53 columns, the RP2350 boards (never flashed), and the untracked `AGENTS.md`.
+wider than 53 columns, and the RP2350 boards (never flashed). Local cleanup 2026-09-16: `AGENTS.md`
+is now a pointer to CLAUDE.md; loose notes and photo originals moved out of the repo (see below).
 The dated milestone notes that follow are history in order; the software block describes the state as
 of 2026-08-17 and is still accurate for what it covers.
 
@@ -321,14 +326,17 @@ on hand means two chances.
 
 Mini-DIN-6 pinout, and the wire colours **verified on the keyboard in hand (2026-09-11)**:
 
-| Pin | Signal | Wire |
-| --- | --- | --- |
-| 1 | DATA | red |
-| 2 | not connected | — |
-| 3 | GND | grey |
-| 4 | +5 V | brown |
-| 5 | CLK | yellow |
-| 6 | not connected | — |
+| Pin | Signal | Wire | Jumper on the perfboard breakout |
+| --- | --- | --- | --- |
+| 1 | DATA | red | brown |
+| 2 | not connected | — | — |
+| 3 | GND | grey | yellow |
+| 4 | +5 V | brown | orange |
+| 5 | CLK | yellow | red |
+| 6 | not connected | — | — |
+
+The jumper column is the user's own breakout (from their note, 2026-09-13). The colours swap
+meaning between the cable and the jumpers: a red jumper is CLK, a brown jumper is DATA.
 
 Probed with a meter from the **front face of the male plug**, against a diagram drawn in that same
 view. Colours are not standardized between keyboards; this map is for *this* cable only, and note
