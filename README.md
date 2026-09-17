@@ -80,11 +80,12 @@ What's actually verified, versus what merely compiles. No wishful thinking in th
 | ✅ | **Runs standalone** | PS/2 keyboard in, VGA out, its own power supply. Files edited and saved with no PC attached. |
 | ✅ | **GPIO from Linux → real pins** | Both `/dev/gpiochipN` (chardev + `libgpiod`) *and* `/sys/class/gpio`. Verified lighting an actual LED. |
 | ✅ | **Runs real software** | Tiny BASIC, Lua 5.4.7, GNU nano 7.2 (full-screen), `sysinfo`, and minesweeper. |
+| 🚧 | **nano on the VGA screen** | Firmware v6 rewrote the VGA terminal so nano draws correctly at 53×30. It matches a reference emulator on recorded nano sessions; first hardware run pending. On v5, nano over VGA is unusable. |
 | ✅ | **Custom kernel drivers** | Block device, GPIO, second console channel — real Linux drivers, not shims. |
 | ✅ | **Desktop harness** | Boots the same kernel on your PC in about a second. No hardware needed. |
 | ✅ | **SSD1306 OLED panel** | A live stats visualizer. Not essential, just fun. |
-| 🚧 | **Programming on the Pico** | Lua with sleep and raw key input, the c4 C compiler, BASIC with an exit command, minesweeper. Verified in the harness on the exact SD image; first hardware run pending. |
-| 🚧 | **Slimmer kernel** | Networking removed, about 1 MB of RAM back. Same state as the row above. |
+| ✅ | **Programming on the Pico** | Lua with sleep and raw key input, and GPIO from Lua and the shell, verified on hardware. Minesweeper too. The c4 C compiler and BASIC's exit command run in the harness and haven't been reported from hardware yet. |
+| ✅ | **Slimmer kernel** | Networking removed, about 1 MB of RAM back. Boots on hardware. |
 | 🚧 | **`pico2` / `pico2_w` (RP2350)** | Builds clean for all four board targets. Never actually flashed. |
 | ❌ | **Networking on the Pico** | Removed on purpose for the RAM. The stack and a half-built host bridge live on in [`net-v1`](https://github.com/flyboy-byte/riscv-pico/releases/tag/net-v1). |
 | ❌ | **I²C / SPI / PWM / ADC for the guest** | Documented as an idea in [PLAN.md](PLAN.md). Deliberately not built. |
@@ -100,8 +101,8 @@ git clone https://github.com/flyboy-byte/riscv-pico && cd riscv-pico
 harness/build.sh
 
 mkdir images
-REL=https://github.com/flyboy-byte/riscv-pico/releases/download/sdcard-v1
-curl -L $REL/riscv-pico-sdcard-v1.tar.gz | tar xz -C images
+REL=https://github.com/flyboy-byte/riscv-pico/releases/download/sdcard-v2
+curl -L $REL/riscv-pico-sdcard-v2.tar.gz | tar xz -C images
 
 # lay the three files out on a FAT image, the way the firmware expects
 dd if=/dev/zero of=harness/disk.img bs=1M count=80
@@ -361,9 +362,9 @@ root filesystem can be damaged.
 ### Firmware
 
 **Just want to flash something?** Grab
-**[`pico-rv32ima-boards-v5`](https://github.com/flyboy-byte/riscv-pico/releases/tag/pico-rv32ima-boards-v5)**
-— prebuilt `.uf2` for all four board variants, ready to go. It already includes the VGA, PS/2 and
-OLED consoles.
+**[`pico-rv32ima-boards-v6`](https://github.com/flyboy-byte/riscv-pico/releases/tag/pico-rv32ima-boards-v6)**
+— prebuilt `.uf2` for all four board variants, ready to go. It includes the VGA, PS/2 and OLED
+consoles, and a VGA terminal that full-screen programs like nano can draw on.
 
 <details>
 <summary><b>Or build it from source</b></summary>
@@ -385,7 +386,7 @@ USB drive called `RPI-RP2` — then copy the `.uf2` across.
 </details>
 
 Then copy `IMAGE`, `DTB` and `ROOTFS` from
-**[`sdcard-v1`](https://github.com/flyboy-byte/riscv-pico/releases/tag/sdcard-v1)** to the root of
+**[`sdcard-v2`](https://github.com/flyboy-byte/riscv-pico/releases/tag/sdcard-v2)** to the root of
 the card.
 
 ---
@@ -403,7 +404,7 @@ You can write and run programs on the machine itself: open a file in nano, save 
 
 Every command for all of this is on one page in
 **[docs/CHEATSHEET.md](docs/CHEATSHEET.md)**, and the same thing is on the card at `/root/help.txt`,
-so `cat /root/help.txt` works when there's no PC attached.
+so `nano -v /root/help.txt` pages through it when there's no PC attached.
 
 The examples are in `/root` on the SD image. Blinking an LED in Lua looks like this:
 
@@ -418,6 +419,7 @@ for i = 1, 10 do
   put("/sys/class/gpio/gpio512/value", "1"); sys.sleep(0.2)
   put("/sys/class/gpio/gpio512/value", "0"); sys.sleep(0.2)
 end
+put("/sys/class/gpio/unexport", "512")               -- release it, or gpioset says busy
 ```
 
 There's a game, too: **`lua /root/mines.lua`** is minesweeper on the VGA screen. Arrow keys move,
@@ -455,15 +457,15 @@ Build outputs ship as GitHub releases rather than committed binaries, which keep
 
 | Release | Contents |
 | --- | --- |
-| **[`sdcard-v1`](https://github.com/flyboy-byte/riscv-pico/releases/tag/sdcard-v1)** | **Current SD card image.** No-network kernel; rootfs with Lua, c4, BASIC and examples. Harness-verified, first hardware boot pending. |
-| **[`pico-rv32ima-boards-v5`](https://github.com/flyboy-byte/riscv-pico/releases/tag/pico-rv32ima-boards-v5)** | **Current firmware**, all four boards — 16 MB two-chip, VGA, PS/2, OLED panel, GPIO CSRs. |
+| **[`sdcard-v2`](https://github.com/flyboy-byte/riscv-pico/releases/tag/sdcard-v2)** | **Current SD card image.** No-network kernel; rootfs with Lua, c4, BASIC and examples, with the console sized for the VGA screen. v1 of it booted on hardware; v2 is harness-verified. |
+| **[`pico-rv32ima-boards-v6`](https://github.com/flyboy-byte/riscv-pico/releases/tag/pico-rv32ima-boards-v6)** | **Current firmware**, all four boards — 16 MB two-chip, VGA with a rewritten VT102 terminal, PS/2 with working Home/End/Delete/Page keys, OLED panel, GPIO CSRs. |
 | [`toolchain-v2`](https://github.com/flyboy-byte/riscv-pico/releases/tag/toolchain-v2) | The cross-compiler, wchar-enabled (needed for nano/ncurses). |
 | [`rv32harness-v1`](https://github.com/flyboy-byte/riscv-pico/releases/tag/rv32harness-v1) | Desktop harness binaries, x86-64 Linux. |
 | [`kernel-gpio-v2`](https://github.com/flyboy-byte/riscv-pico/releases/tag/kernel-gpio-v2) | Previous kernel + rootfs, with networking. Hardware-verified. |
 | [`net-v1`](https://github.com/flyboy-byte/riscv-pico/releases/tag/net-v1) | The networking reference: TCP/IP stack and the second console channel's SLIP work. |
-| [`apps-v1`](https://github.com/flyboy-byte/riscv-pico/releases/tag/apps-v1), [`apps-v2`](https://github.com/flyboy-byte/riscv-pico/releases/tag/apps-v2) | Older loose binaries. Everything current is in `sdcard-v1`. |
+| [`apps-v1`](https://github.com/flyboy-byte/riscv-pico/releases/tag/apps-v1), [`apps-v2`](https://github.com/flyboy-byte/riscv-pico/releases/tag/apps-v2) | Older loose binaries. Everything current is in `sdcard-v2`. |
 
-Older firmware `-v3`/`-v4` still boot fine. `-v1`/`-v2` are superseded single-chip 8 MB builds that
+Firmware `-v5` boots `sdcard-v2` fine, but nano on its VGA screen is unusable. `-v3`/`-v4` still boot too. `-v1`/`-v2` are superseded single-chip 8 MB builds that
 don't boot the current rootfs.
 
 ---

@@ -17,6 +17,8 @@
 ::sysinit:/bin/mount -a
 ::sysinit:/bin/mount -o remount,rw /
 ::sysinit:/etc/load_modules.sh
+# The VGA screen is 53x30; the console reports 0x0, so full-screen programs would assume 80x24
+::sysinit:/usr/bin/ttysize 30 53
 
 # Put a console on the serial port
 console::respawn:/bin/sh

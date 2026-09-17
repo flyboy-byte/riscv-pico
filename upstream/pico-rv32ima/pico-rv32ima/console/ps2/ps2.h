@@ -11,12 +11,12 @@
 #define PS2_ENTER 13
 #define PS2_BACKSPACE 127
 #define PS2_ESC 27
-#define PS2_INSERT 0
-#define PS2_DELETE 127
-#define PS2_HOME 0
-#define PS2_END 0
-#define PS2_PAGEUP 25
-#define PS2_PAGEDOWN 26
+#define PS2_INSERT 1 // navigation keys get codes no other key produces;
+#define PS2_DELETE 4 // terminal.c turns them into escape sequences
+#define PS2_HOME 2
+#define PS2_END 3
+#define PS2_PAGEUP 5
+#define PS2_PAGEDOWN 6
 #define PS2_UPARROW 11
 #define PS2_LEFTARROW 8
 #define PS2_DOWNARROW 10

@@ -1,7 +1,7 @@
 # Cheat sheet — what's on the machine and how to use it
 
-Everything here runs **on the Pico**, typed at its own shell. A copy lives on the card at
-`/root/help.txt`, so `cat /root/help.txt` works when there's no PC around.
+Everything here runs **on the Pico**, typed at its own shell. A shorter copy, sized for the 53-column
+screen, lives on the card: `nano -v /root/help.txt` pages through it (Ctrl+V next page, Ctrl+X quit).
 
 Line 0 of the GPIO chip is **Pico GP1, physical pin 2**. The four guest-usable lines are:
 
@@ -22,6 +22,12 @@ is busy, something exported it through sysfs first. Release it with:
 ```sh
 echo 512 > /sys/class/gpio/unexport   # 513, 514, 515 for the other lines
 ```
+
+`blink.lua` and `gpio_toggle.c` release the line when they finish. `gpio_set.c` leaves it exported
+so the pin holds its level.
+
+`export` and `unexport` are write-only, so `cat /sys/class/gpio/export` says "Permission denied".
+That's normal. `ls /sys/class/gpio` shows what exists; `gpio512` only appears once exported.
 
 ```sh
 # the modern chardev interface
@@ -154,15 +160,30 @@ happened once and left a broken directory entry behind.
 `head`, `tail`, `grep`, `sed`, `awk`, `wc`, `cp`, `mv`, `chmod`, `ps`, `kill`, `date`, `stty`, `vi`,
 `df`. Busybox was trimmed to save space. Adding some back means rebuilding the rootfs.
 
-### nano on the VGA screen
+### nano and the 53×30 screen
 
-**nano does not work properly on the VGA screen yet.** The VGA terminal only understands four escape
-sequences, and nano sends many more. They show up as garbage, and the screen can scroll until nano is
-out of view. Setting `COLUMNS=53 LINES=30` was tested on 2026-09-16 and doesn't help. nano works fine
-over the USB serial console.
+Needs firmware `pico-rv32ima-boards-v6` or later and card `sdcard-v2` or later. On v5 firmware,
+nano over VGA is unusable.
 
-If the screen gets stuck, nano is probably still running. Type blind: **Ctrl+X**, then **N** if it
-asks to save, then `clear`.
+The card sets the console to 53 columns by 30 rows at boot, so nano fits. This nano build can't
+soft-wrap, so a long line scrolls sideways when the cursor is on it; a `>` at the right edge means
+the line goes on past the screen.
+
+| Key | In nano |
+| --- | --- |
+| Ctrl+O / Ctrl+X | save / quit |
+| Ctrl+K / Ctrl+U | cut line / paste |
+| Ctrl+W | search |
+| Ctrl+V / Ctrl+Y, or Page Down / Page Up | next / previous page |
+| Home / End, Delete | start / end of line, delete forward |
+
+```sh
+ttysize                         # prints "30 53"
+ttysize 24 80                   # over USB serial with a normal-sized terminal window
+nano -x notes.txt               # hide the two help lines for two more rows of text
+```
+
+If a full-screen program ever leaves the screen in a mess, `clear` blanks it.
 
 ---
 

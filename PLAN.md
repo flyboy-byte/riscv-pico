@@ -8,26 +8,33 @@ and read back on that setup. Milestones: Linux on real hardware (2026-08-27), gu
 pins (2026-08-29), PS/2 keyboard (2026-09-11), VGA and standalone (2026-09-14) — see "Console
 bring-up" directly below.
 
-**SD card from 2026-09-14/15 booted on hardware 2026-09-16.** On it: the no-network kernel, Lua
-with `sys.sleep`/`sys.ms`/`sys.raw`, c4 with `for` + `write`, BASIC with `BYE`, minesweeper at
-`/root/mines.lua`, and `/root/help.txt` (published as the `sdcard-v1` pre-release). User report:
-Lua blink works, GPIO works, minesweeper "worked great", and `sync` then `halt` shut down cleanly.
-Three problems:
+**SD card from 2026-09-14/15 (`sdcard-v1`) booted on hardware 2026-09-16.** User report: Lua blink
+works, GPIO works, minesweeper "worked great", and `sync` then `halt` shut down cleanly. c4 and
+BASIC's `BYE` weren't mentioned, so they are still harness-only. Three problems, all handled the
+same day:
 - **`gpioset` said the line was busy after `blink.lua` ran.** blink exported GPIO 512 through sysfs
-  and never released it. Fixed in the repo 2026-09-16 (blink now unexports it); the card still has
-  the old copy. Workaround on the card: `echo 512 > /sys/class/gpio/unexport`.
-- **nano is unusable on VGA, and `COLUMNS=53 LINES=30` changed nothing.** The screen eventually
-  scrolled until nano was out of view, and only a power-off recovered it. Cause: `terminal.c` is
-  the bug, not the terminal size. See "Known issue" under Console bring-up.
-- **"couldn't edit or see any files in /sys", and unsure whether root is writable.** Not
-  diagnosed yet; need the exact command used. `/` is remounted read-write by `inittab`, and nano
-  saved a file there on 09-14, so root was writable then.
+  and never released it. ~~Open~~ — FIXED 2026-09-16: blink and `gpio_toggle.c` now unexport.
+  Verified in the harness: blink, then `gpioset` exits 0.
+- **nano unusable on VGA; `COLUMNS=53 LINES=30` changed nothing.** ~~Open~~ — FIXED 2026-09-16 in
+  firmware (new VT102 terminal) plus a boot-time `ttysize 30 53`. Harness-verified; **hardware run
+  pending.** See "VGA terminal rewrite" under Console bring-up.
+- **"couldn't see or edit files in /sys".** The user was running `cat /sys/class/gpio/export`.
+  That file is write-only, so "Permission denied" is correct. Documented in the cheat sheet and
+  `help.txt`. Root is writable (`inittab` remounts it rw).
 
-**Next session starts here:** the VGA terminal fix (see "Known issue"), then rewrite the card so it
-gets the fixed `blink.lua`. The user has photos for the README (location not yet known; strip EXIF
-before committing). Other open threads: `usleep` for c4, the busybox rootfs trim (needs the user's
-add/drop list), and the still-untracked `AGENTS.md`. Flip `sdcard-v1` out of pre-release once the
-card is rewritten.
+**Card rewritten 2026-09-16** (backup of the card as it was: `~/.riscv-pico-scratch/backups/
+sd-2026-09-16/`, including the v5 `.uf2`). It keeps the user's `/lol` and `/root/gpio.sh`, and adds
+`/usr/bin/ttysize`, the `inittab` line, and 53-column rewrites of `blink.lua`, `mines.lua` (messages
+only), `help.txt`, `gpio_set.c` and `gpio_toggle.c`. Public copy without the user's files:
+`sdcard-v2`. Firmware: `pico-rv32ima-boards-v6`. **The user still has to flash v6**: BOOTSEL, then
+copy `firmware/out/pico-rv32ima-pico.uf2`.
+
+**Next session starts here:** ask how nano on VGA went with v6 flashed, and whether c4 and `BYE`
+were tried. If nano works, flip the "nano on the VGA screen" row in README.md and `site/index.html`
+to verified, and take `sdcard-v2` and `boards-v6` out of pre-release. The user is working on
+README photos (strip EXIF before committing). Other open threads: `usleep` for c4, the busybox
+rootfs trim (needs the user's add/drop list), `mines.lua` still has code lines wider than 53
+columns (nano shows them with `>`), and the still-untracked `AGENTS.md`.
 The dated milestone notes that follow are history in order; the software block describes the state as
 of 2026-08-17 and is still accurate for what it covers.
 
@@ -96,21 +103,55 @@ back. Keyboard in, display out, own power: the standalone machine this project w
 Reading the column bottom to top, V/H/R/G/B maps onto GP16-20 in order, so the jumpers run parallel
 with no crossings. The one gap on the Pico side, physical pin 23, is ground.
 
-**Known issue, not yet fixed: nano is unusable on the VGA console.** ~~Candidate fix: set the size
-with `stty` / `COLUMNS=53 LINES=30`~~ — tested 2026-09-16, no effect (and `stty` isn't installed).
-The real cause is `terminal.c` (INFERRED from the source, not yet captured on the wire):
-- It implements only CSI `J`, `K`, `H` and `m`. busybox init sets `TERM=linux`, so nano also sends
-  scroll regions (`r`), insert/delete line (`L`/`M`), relative cursor moves, and `ESC 7`/`ESC 8`.
-  Those are ignored, so redraws land in the wrong place.
-- **Its CSI parser breaks on private sequences like `ESC[?25l`.** It stores the `?`, stops, then
-  swallows the next digit as if it were the final byte, and prints the rest (`5l`) as text.
-- Writing at the bottom row scrolls the whole screen. With no scroll regions, nano's screen drifts
-  upward until it is out of view.
+### VGA terminal rewrite — built and harness-verified 2026-09-16, hardware run pending
 
-Plan: capture nano's actual output with `TERM=linux` in the desktop harness, then extend `runCSI`
-to cover those sequences, fix the parser for `?`, and test `terminal.c` on the desktop against a
-fake VGA buffer before flashing. Recovery on the current firmware: type Ctrl+X blind, then N, then
-`clear`.
+~~Known issue: nano is unusable on the VGA console~~. ~~Candidate fix: set the size with `stty` /
+`COLUMNS=53 LINES=30`~~ — tested on hardware 2026-09-16, no effect (and `stty` isn't installed).
+
+**Cause, confirmed from captured output.** nano was recorded in the harness (a Python pty driver
+logging every byte). `TERM` is `vt102`, not `linux` as first assumed. Upstream `terminal.c` failed in
+four ways:
+- It implemented only CSI `J`, `K`, `H`, `m`. nano uses scroll regions (`r`), reverse index
+  (`ESC M`), relative moves (`A`/`B`/`C`/`D`), `ESC 7`/`ESC 8`, insert mode, and reverse video.
+- Its parser broke on `ESC[?7h`-style sequences: it swallowed the next digit and printed the rest.
+- Writing the last column wrapped (and at the bottom, scrolled) immediately, with no deferred wrap.
+- The console reported 0x0 rows and columns, so ncurses assumed 80x24.
+
+**Fix, in `upstream/pico-rv32ima/pico-rv32ima/console/terminal/`:**
+- `vt.c`/`vt.h` (new): a byte-at-a-time VT102 state machine with no hardware dependencies. It
+  supports scroll regions, IL/DL/ICH/DCH/ECH, insert mode, deferred wrap, save/restore, origin
+  mode, DECCKM, SGR colours and reverse video, and cursor-position/DA replies. Unknown sequences
+  are swallowed, never printed. It is compiled `-Os` (see the RAM note below).
+- `terminal.c` (rewritten glue): drains up to 256 bytes per task (the old code handled one byte per
+  call and blocked mid-sequence). The cursor is drawn by saving and restoring its cell, so it no
+  longer overwrites reverse-video backgrounds. Arrows send `ESC O x` when the application sets
+  DECCKM, which nano does.
+- `ps2.h`: Home/End/Insert used to be code 0 (dropped), Delete equalled Backspace (127), and Page
+  Down sent 26 (Ctrl+Z, which suspends the foreground program). They now have unique codes, which
+  `terminal.c` turns into `ESC[1~`…`ESC[6~`, plus Shift+Tab as `ESC[Z`.
+- `apps/ttysize.c` (new), run from `inittab` as `ttysize 30 53`: sets `TIOCSWINSZ` on the console.
+  Over USB serial it now also reports 53x30; `ttysize 24 80` undoes that.
+
+**RAM note, worth remembering.** The binary is `copy_to_ram`, so code lives in the 256 KB SRAM.
+The first build overflowed by 804 bytes. Two causes: `vt.c` at `-O3` was 4.5 KB (2.5 KB at `-Os`),
+and one `snprintf` pulled in the SDK's floating-point printf (`_etoa`/`_ftoa`, about 5 KB). Heap
+room (`__StackLimit - __bss_end__`) is now 7,788 bytes on `pico`, against 10,056 in v5. Full newlib
+`malloc` is linked and may round its first request up to a 4 KB page, so **keep that figure above
+4096**, and check it after any firmware change. Never use printf-family calls in firmware code.
+
+**Verification.** `harness/vt_check.py` builds `vt.c` natively (`harness/vt_host.c`), feeds it
+captured console bytes, and compares the final 53x30 screen (text, reverse video, cursor) against
+`pyte`. 28 checkpoints across four sessions pass: opening, scrolling, paging, typing, cutting and
+exiting nano; `nano -v` paging help.txt; `ls` with colours; shell line wrap; minesweeper. Two
+deliberate deviations from pyte, both matching a real VT102:
+- pyte clamps an `ESC 8` restore into the scroll region, and nano depends on it not doing that.
+  The checker patches this. `desktop_terminal.py` uses stock pyte, so it may misdraw the same case.
+- Writing the last column and then `ESC[K` erases that character on a real VT, and in ours. pyte
+  keeps it. `mines.lua`'s 53-character help line hit this, so the line was shortened.
+
+Captures and the test disk live in `~/.riscv-pico-scratch/work/term/` (`drive.py` scripts a harness
+session: `SEND`/`WAIT`/`SNAP`). Lesson: write those scripts from Python, not zsh `echo`, which
+turns `\r` into a real CR that Python then reads as a line ending.
 
 **Status: the PS/2 keyboard works, verified on real hardware 2026-09-11.** Typed into GNU nano
 running in guest Linux over the keyboard, with output on the USB serial console. First real

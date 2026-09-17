@@ -1,4 +1,5 @@
--- blink.lua: blink the LED on guest GPIO line 0 (Pico GP1, physical pin 2)
+-- blink.lua: blink the LED on GPIO line 0
+-- (Pico GP1, physical pin 2)
 -- usage: lua blink.lua [times]
 local base = "/sys/class/gpio/"
 
@@ -10,7 +11,8 @@ local function write(path, value)
   return true
 end
 
-write(base .. "export", "512")            -- harmless if already exported
+-- fails harmlessly if already exported
+write(base .. "export", "512")
 write(base .. "gpio512/direction", "out")
 
 local times = tonumber(arg[1]) or 10
@@ -20,6 +22,8 @@ for i = 1, times do
   write(base .. "gpio512/value", "0")
   sys.sleep(0.2)
 end
--- hand the line back, or gpioset/gpioget will report it busy until reboot
+
+-- give the line back, or gpioset will say
+-- it is busy until reboot
 write(base .. "unexport", "512")
 print("blinked " .. times .. " times")

@@ -4,24 +4,24 @@
 #include "pico/stdlib.h"
 #include <stdlib.h>
 
-#include <ctype.h>
 #include <string.h>
 
 #include "console.h"
 #include "../vga/vga.h"
 #include "../ps2/ps2.h"
+#include "vt.h"
 
-#define ESC 0x1B
-#define CSI '['
-
-#define TERM_KEY_UP 'A'
-#define TERM_KEY_DOWN 'B'
-#define TERM_KEY_RIGHT 'C'
-#define TERM_KEY_LEFT 'D'
-
-static const uint8_t termColors[] = {BLACK, RED, GREEN, YELLOW, BLUE, MAGENTA, CYAN, WHITE};
+// Bytes of guest output handled per terminal_task() call, so a big redraw can't starve the
+// keyboard and the other console tasks on core 0.
+#define TERM_BYTES_PER_TASK 256
 
 queue_t term_screen_queue;
+
+static void send_keys(const char *s)
+{
+    while (*s)
+        queue_try_add(&kb_queue, s++);
+}
 
 void terminal_init(void)
 {
@@ -30,238 +30,136 @@ void terminal_init(void)
     VGA_puts("\n\rpico-rv32ima, compiled ");
     VGA_puts(__DATE__);
     VGA_puts("\n\r");
+    vt_init(send_keys);
     queue_init(&term_screen_queue, sizeof(char), IO_QUEUE_LEN);
 }
 
-static bool termCharAvailable()
+// The cursor is drawn by recolouring its cell, so it is taken off before the emulator touches
+// the screen and put back afterwards. That way a cell never keeps the cursor's colours.
+static struct
 {
-    return !queue_is_empty(&term_screen_queue);
-}
+    bool shown;
+    uint x, y;
+    uint8_t fg, bg;
+} cursor;
 
-static char termGetChar()
+static void cursor_hide(void)
 {
-    char c;
-    queue_remove_blocking(&term_screen_queue, &c);
-    return c;
-}
-
-static char termPeekChar()
-{
-    char c;
-    queue_peek_blocking(&term_screen_queue, &c);
-    return c;
-}
-
-static void clearInLine()
-{
-    for (int i = cr_x; i < TERM_WIDTH; i++)
-    {
-        termBuf[cr_y][i] = 0;
-        bgColBuf[cr_y][i] = 0;
-    }
-}
-
-static void runCSI(char csi, uint *param, uint paramCount)
-{
-    // Clear screen
-    if (csi == 'J')
-    {
-        // Clear everything
-        if (paramCount && param[0] == 2)
-            VGA_clear();
-
-        // Clear everything after cursor
-        else if (paramCount == 0)
-        {
-            clearInLine();
-            if (cr_y < TERM_HEIGHT - 1)
-                for (int i = cr_y + 1; i < TERM_HEIGHT; i++)
-                {
-                    dma_memset(termBuf[i], 0, TERM_WIDTH);
-                    dma_memset(bgColBuf[i], 0, TERM_WIDTH);
-                }
-        }
-    }
-
-    // Clear in line
-    else if (csi == 'K')
-    {
-        // Clear from cursor to end of line
-        if (paramCount == 0)
-            clearInLine();
-    }
-
-    // Cursor movement
-    else if (csi == 'H')
-    {
-        // Move to top left corner
-        if (paramCount == 0)
-            VGA_cursor(0, 0);
-        else if (paramCount == 2)
-            VGA_cursor(param[1], param[0]);
-    }
-
-    // Graphic rendition parameters
-    else if (csi == 'm')
-    {
-        // Reset parameters
-        if (paramCount == 0)
-        {
-            fg_col = WHITE;
-            bg_col = BLACK;
-        }
-        else
-            for (int i = 0; i < paramCount; i++)
-            {
-                // Foreground color
-                if (param[i] >= 30 && param[i] <= 37)
-                    fg_col = termColors[param[i] - 30];
-                // Background color
-                else if (param[i] >= 40 && param[i] <= 47)
-                    bg_col = termColors[param[i] - 40];
-            }
-    }
-}
-
-static void parseCSI(char *s)
-{
-    uint slen = strlen(s);
-
-    uint params[25];
-    uint paramNum = 0;
-    char csi = s[slen - 1];
-
-    if (slen > 1)
-    {
-        char *p = strtok(s, ";");
-        while (p != NULL)
-        {
-            if (strlen(p))
-                params[paramNum++] = atoi(p);
-            else
-                params[paramNum++] = 0;
-            p = strtok(NULL, ";");
-        }
-    }
-
-    runCSI(csi, params, paramNum);
-}
-
-static void vt100Emu()
-{
-    if (!termCharAvailable())
+    if (!cursor.shown)
         return;
-
-    int c = termGetChar();
-
-    // Handle escape sequences
-    if (c == ESC)
-    {
-        int next = termGetChar();
-
-        // Handle CSI escape sequences
-        if (next == CSI)
-        {
-
-            char s[100];
-            uint cnt = 0;
-            do
-            {
-                next = termPeekChar();
-                if (!isalpha(next))
-                    termGetChar();
-                s[cnt++] = next;
-
-            } while (isdigit(next) || next == ';');
-            s[cnt] = '\0';
-            termGetChar();
-            parseCSI(s);
-        }
-    }
-
-    else
-        VGA_putc(c); // Handle regular characters
+    fgColBuf[cursor.y][cursor.x] = cursor.fg;
+    bgColBuf[cursor.y][cursor.x] = cursor.bg;
+    cursor.shown = false;
 }
 
-static uint64_t GetTimeMiliseconds()
+static void cursor_show(void)
 {
-    absolute_time_t t = get_absolute_time();
-    return to_ms_since_boot(t);
+    if (cursor.shown || !vt_cursor_visible())
+        return;
+    cursor.x = cr_x;
+    cursor.y = cr_y;
+    cursor.fg = fgColBuf[cr_y][cr_x];
+    cursor.bg = bgColBuf[cr_y][cr_x];
+    fgColBuf[cr_y][cr_x] = BLACK;
+    bgColBuf[cr_y][cr_x] = GREEN;
+    cursor.shown = true;
 }
 
-static const char csiStr[] = {ESC, CSI};
-
-static void termSendArrow(char a)
+static void send_arrow(char a)
 {
-
-    queue_try_add(&kb_queue, csiStr);
-    queue_try_add(&kb_queue, csiStr + 1);
-    queue_try_add(&kb_queue, &a);
+    char seq[4] = {0x1b, vt_app_cursor_keys() ? 'O' : '[', a, 0};
+    send_keys(seq);
 }
 
 static void handlePs2Keyboard(void)
 {
     while (PS2_keyAvailable())
     {
-        uint16_t c = PS2_readKey();
+        uint16_t key = PS2_readKey();
+        bool ctrl = key & 0x100;
+        uint8_t c = key & 0xFF;
 
         switch (c)
         {
         case PS2_UPARROW:
-            termSendArrow(TERM_KEY_UP);
+            send_arrow('A');
             break;
-
         case PS2_DOWNARROW:
-            termSendArrow(TERM_KEY_DOWN);
+            send_arrow('B');
             break;
-
-        case PS2_LEFTARROW:
-            termSendArrow(TERM_KEY_LEFT);
-            break;
-
         case PS2_RIGHTARROW:
-            termSendArrow(TERM_KEY_RIGHT);
+            send_arrow('C');
             break;
-
+        case PS2_LEFTARROW:
+            send_arrow('D');
+            break;
+        case PS2_HOME:
+            send_keys("\x1b[1~");
+            break;
+        case PS2_INSERT:
+            send_keys("\x1b[2~");
+            break;
+        case PS2_DELETE:
+            send_keys("\x1b[3~");
+            break;
+        case PS2_END:
+            send_keys("\x1b[4~");
+            break;
+        case PS2_PAGEUP:
+            send_keys("\x1b[5~");
+            break;
+        case PS2_PAGEDOWN:
+            send_keys("\x1b[6~");
+            break;
+        case PS2_SHIFT_TAB:
+            send_keys("\x1b[Z");
+            break;
+        case 0:
+            break;
         default:
-            if (c & 0x100)
+            if (ctrl)
             {
-                c &= 0xFF;
-                c -= 'a' - 1;
+                // Ctrl+letter and Ctrl+[ \ ] ^ _ are the control codes 1-31
+                if (c >= 'a' && c <= 'z')
+                    c -= 'a' - 1;
+                else if (c >= '@' && c <= '_')
+                    c -= '@';
+                else if (c == ' ')
+                    c = 0;
             }
             queue_try_add(&kb_queue, &c);
-            // VGA_putc(c);
             break;
         }
     }
 }
 
-static void drawCursor(uint x, uint y, bool en)
-{
-    if (en)
-        bgColBuf[y][x] = GREEN;
-    else
-        bgColBuf[y][x] = BLACK;
-}
-
 void terminal_task(void)
 {
-    static uint prevMillis = 0;
-    static uint px, py;
-    static bool en = false;
-    vt100Emu();
-    handlePs2Keyboard();
-    uint millis = GetTimeMiliseconds();
-    if (millis > prevMillis + 150)
-    {
-        if ((cr_x != px || cr_y != py) && !en)
-            drawCursor(px, py, false);
-        drawCursor(cr_x, cr_y, en);
-        en = !en;
+    static uint32_t blink_ms = 0;
+    static bool blink_on = true;
+    char c;
 
-        px = cr_x;
-        py = cr_y;
-        prevMillis = millis;
+    if (!queue_is_empty(&term_screen_queue))
+    {
+        cursor_hide();
+        for (int i = 0; i < TERM_BYTES_PER_TASK && queue_try_remove(&term_screen_queue, &c); i++)
+            vt_putc((unsigned char)c);
+        blink_on = true; // keep the cursor solid while output is arriving
+        blink_ms = to_ms_since_boot(get_absolute_time());
+        cursor_show();
+    }
+
+    handlePs2Keyboard();
+
+    uint32_t now = to_ms_since_boot(get_absolute_time());
+    if (now - blink_ms > 400)
+    {
+        blink_ms = now;
+        blink_on = !blink_on;
+        if (blink_on)
+            cursor_show();
+        else
+            cursor_hide();
     }
 }
 

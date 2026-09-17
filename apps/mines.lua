@@ -37,7 +37,7 @@ local function reset()
   mine, shown, flag = {}, {}, {}
   for i = 1, W * H do mine[i], shown[i], flag[i] = false, false, false end
   cx, cy, alive, won, started = 1, 1, true, false, false
-  message = "arrows move  space digs  f flags  r restarts  q quits"
+  message = "arrows move  space digs  f flag  r restart  q quit"
 end
 
 -- mines are placed after the first dig, so the first move is never a loss
@@ -187,7 +187,7 @@ reset()
 local raw = false
 if sys and sys.raw then raw = sys.raw(true) end
 if not raw then
-  message = "no terminal, using typed commands: w a s d, space, f, r, q"
+  message = "no terminal: type w a s d, space, f, r, q"
 end
 
 io.write(CLEAR)

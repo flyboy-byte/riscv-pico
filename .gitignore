@@ -18,6 +18,7 @@ __pycache__/
 
 # Desktop harness build output and local test disk images
 harness/rv32harness*
+harness/vt_host
 harness/*.img
 harness/.recent_disk_images.json
 

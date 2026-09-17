@@ -1,0 +1,69 @@
+riscv-pico: what is on this machine
+Page through this: nano -v /root/help.txt
+(Ctrl+V next page, Ctrl+Y back, Ctrl+X quit)
+
+GPIO  line 0 = GP1 = physical pin 2
+      lines 0-3 = GP1, GP9, GP15, GP22
+  gpioinfo gpiochip0      list lines
+  gpioset gpiochip0 0=1   line 0 high
+  gpioget gpiochip0 0     read line 0
+  cd /sys/class/gpio
+  echo 512 > export       sysfs: line 0
+  echo out > gpio512/direction
+  echo 1 > gpio512/value
+  cat gpio512/value
+  echo 512 > unexport     release it
+Only one interface can hold a line. If
+gpioset says busy, release it as above.
+export and unexport are write-only, so
+cat on them fails. That is normal.
+
+LUA
+  lua /root/blink.lua 3   blink 3 times
+  lua                     interactive
+  sys.sleep(0.2)  sys.ms()
+  sys.raw(true)  sys.raw(false)
+os.execute and io.popen do NOT work
+here (no fork on a no-MMU machine).
+
+C4  compile and run C on this machine
+  c4 /root/hello.c
+  c4 /root/gpio_set.c 1   line 0 high
+  c4 /root/gpio_toggle.c  for loop
+  c4 /root/c4.c /root/hello.c
+                          c4 runs c4
+  c4 -s file.c            show bytecode
+Subset of C: char, int, pointers,
+if/else/while/for/return. No structs,
+no floats, no preprocessor.
+
+BASIC
+  basic                   start it
+  10 PRINT "hi"   RUN   LIST   NEW
+  BYE                     leave BASIC
+                  (EXIT, QUIT, SYSTEM too)
+
+GAME
+  lua /root/mines.lua     16x12, 25 mines
+  lua /root/mines.lua 20 14 40
+                   width, height, mines
+  arrows move, space digs, f flags,
+  r restarts, q quits
+
+NANO
+  nano notes.txt          edit a file
+  Ctrl+O save   Ctrl+X quit
+  Ctrl+K cut line   Ctrl+U paste
+  Ctrl+W search
+Long lines scroll sideways; a > at the
+right edge means the line goes on.
+Screen is 53x30. ttysize prints it;
+over USB serial run: ttysize 24 80
+
+SYSTEM
+  sysinfo  free  uptime  dmesg
+  sync                ALWAYS before power off
+  halt                cleaner still
+
+NOT INSTALLED: head tail grep sed awk
+wc cp mv chmod ps kill date stty vi df
