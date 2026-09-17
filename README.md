@@ -28,6 +28,11 @@
   <a href="PLAN.md">PLAN.md</a>
 </p>
 
+<p align="center">
+  <b>The story, photos, full pin map and wiring diagrams:
+  <a href="https://flyboy-byte.github.io/riscv-pico/">flyboy-byte.github.io/riscv-pico</a></b>
+</p>
+
 ---
 
 > [!NOTE]
@@ -91,7 +96,7 @@ What's actually verified, versus what merely compiles. No wishful thinking in th
 | ✅ | **Runs real software** | Tiny BASIC, Lua 5.4.7, GNU nano 7.2 (full-screen), `sysinfo`, and minesweeper. |
 | ✅ | **nano on the VGA screen** | Firmware v6 rewrote the VGA terminal as a VT102, so nano draws correctly at 53×30. Verified on hardware. On v5, nano over VGA is unusable. |
 | ✅ | **Custom kernel drivers** | Block device, GPIO, second console channel — real Linux drivers, not shims. |
-| ✅ | **Desktop harness** | Boots the same kernel on your PC in about a second. No hardware needed. |
+| ✅ | **Desktop harness** | Boots the same kernel on your PC in a few seconds. No hardware needed. |
 | ✅ | **SSD1306 OLED panel** | A live stats visualizer. Not essential, just fun. |
 | ✅ | **Programming on the Pico** | Lua with sleep and raw key input, GPIO from Lua and the shell, the c4 C compiler, BASIC's `BYE`, and minesweeper. All verified on hardware. |
 | ✅ | **Slimmer kernel** | Networking removed, about 1 MB of RAM back. Boots on hardware. |
@@ -179,6 +184,18 @@ the 16 MB of memory actually lives.
 
 ## Build one yourself
 
+The whole path, start to finish. No compiler needed: the firmware and the SD card image are both
+prebuilt.
+
+| Step | Do this | Where |
+| --- | --- | --- |
+| 1 | Buy the parts | [Parts](#parts--about-20-for-the-core) |
+| 2 | Wire it: PSRAM and SD card first, keyboard and VGA after | [Wiring](#wiring) |
+| 3 | Flash the firmware: hold BOOTSEL, plug in, copy one `.uf2` file | [Firmware](#firmware) |
+| 4 | Put three files on a FAT32 microSD card | [SD card](#sd-card) |
+| 5 | Power on, **press any key**, wait for the `~ #` prompt | [First boot](#first-boot) |
+| 6 | Blink an LED, edit a file, play minesweeper | [Programming on the Pico](#programming-on-the-pico) |
+
 ### Parts — about $20 for the core
 
 Everything here is what's on the verified build. No minimum order quantities, all single-quantity
@@ -195,6 +212,7 @@ friendly. Prices drift; this isn't a live feed.
 | SSD1306 OLED, 128×64 | 0–1 | Optional. Must be the **I²C** 4-pin variant, not SPI. |
 | Decoupling caps | a few | 100 nF ceramic + 10–100 µF bulk. Cheap insurance — see the power warning below. |
 | Breadboard + jumpers | — | |
+| Micro-USB cable | 1 | Flashing the firmware, and the serial console. |
 
 To run it without a PC, add:
 
@@ -203,6 +221,7 @@ To run it without a PC, add:
 | **[Serial Wombat PCB_0024 VGA breakout](https://www.amazon.com/Breakout-Resistors-Serial-Wombat-Arduino/dp/B0D4F7H59M)** | 1 | Resistors already fitted. Plug in an ordinary VGA cable; six jumpers to the Pico. |
 | VGA monitor + cable | 1 | Anything that takes 640×480 at 60 Hz. |
 | PS/2 keyboard | 1 | A real PS/2 keyboard, not a USB keyboard on a passive purple adapter. |
+| PS/2 socket breakout | 0–1 | Or do what this build did: cut the keyboard's cable and solder its four wires to a scrap of perfboard with jumper wires. |
 | Logic level converter, BSS138 4-channel | 1 | PS/2 is a 5 V bus. Only the keyboard needs it. |
 | USB-C breadboard power supply | 1 | 5 V rail powers the Pico and keyboard; 3.3 V rail powers the SD card and OLED. |
 
@@ -394,9 +413,46 @@ USB drive called `RPI-RP2` — then copy the `.uf2` across.
 
 </details>
 
-Then copy `IMAGE`, `DTB` and `ROOTFS` from
-**[`sdcard-v2`](https://github.com/flyboy-byte/riscv-pico/releases/tag/sdcard-v2)** to the root of
-the card.
+### SD card
+
+1. Format a 4–32 GB microSD card as **FAT32**.
+2. From **[`sdcard-v2`](https://github.com/flyboy-byte/riscv-pico/releases/tag/sdcard-v2)**, download `IMAGE`, `DTB` and `ROOTFS`. The same three
+   files are also bundled as `riscv-pico-sdcard-v2.tar.gz`.
+3. Copy all three to the root of the card, not into a folder. Their names must stay exactly as they
+   are.
+
+### First boot
+
+Plug the Pico into a PC over USB and open its serial console: `screen /dev/ttyACM0 115200` on
+Linux, or PuTTY on the new COM port on Windows. With the VGA screen attached you can skip this and
+watch the monitor instead.
+
+1. The console prints `PSRAM OK`, then `SD init OK`, and **waits for a keypress**. Press any key,
+   on the serial console or on the PS/2 keyboard. On the VGA screen, all you see before that is
+   the `pico-rv32ima, compiled …` banner.
+2. `Loading kernel image`, then `Starting RISC-V VM`, then the Linux boot log.
+3. A `~ #` shell prompt, in well under a minute. Try `sysinfo`.
+
+Before unplugging, type `halt`, or at least `sync`. The root filesystem is ext2 and doesn't
+survive a hard power-off well.
+
+<details>
+<summary><b>If it doesn't boot</b></summary>
+
+<br>
+
+| You see | Likely cause |
+| --- | --- |
+| Nothing at all over USB serial | Firmware not flashed, or the console opened too late. Press a key; the boot waits for one anyway. |
+| `PANIC: PSRAM ERR`, repeating | PSRAM wiring or power. Check `/CE` on GP13/GP14, the 10 kΩ pull-up, and that each chip has 3.3 V and ground. |
+| `PANIC: Error initalizing SD` | `MOSI`/`CLK` swapped (the most common mistake), the card isn't FAT32, or the module isn't 3.3 V. |
+| `PANIC: Error opening image file` | The card is readable but `IMAGE` isn't in its root, or it was renamed. |
+| Boots, then random resets once the OLED or SD is added | Power distribution. See the warning above. |
+| VGA monitor says "no signal" | Check V and H on GP16/GP17 and the ground jumper. The monitor must accept 640×480 at 60 Hz. |
+| Keyboard does nothing | Swap `DATA` and `CLK`. Check the converter's low side idles at 3.3 V. |
+| `System hasn't been cleanly shutdown` | Harmless warning after a power-off without `halt`. |
+
+</details>
 
 ---
 
@@ -412,8 +468,8 @@ You can write and run programs on the machine itself: open a file in nano, save 
 | **Shell** | `sh script.sh` | busybox `hush`, not bash. |
 
 Every command for all of this is on one page in
-**[docs/CHEATSHEET.md](docs/CHEATSHEET.md)**, and the same thing is on the card at `/root/help.txt`,
-so `nano -v /root/help.txt` pages through it when there's no PC attached.
+**[docs/CHEATSHEET.md](docs/CHEATSHEET.md)**. A shorter copy sized for the VGA screen is on the card:
+`nano -v /root/help.txt` pages through it when there's no PC attached.
 
 The examples are in `/root` on the SD image. Blinking an LED in Lua looks like this:
 
@@ -474,8 +530,8 @@ Build outputs ship as GitHub releases rather than committed binaries, which keep
 | [`net-v1`](https://github.com/flyboy-byte/riscv-pico/releases/tag/net-v1) | The networking reference: TCP/IP stack and the second console channel's SLIP work. |
 | [`apps-v1`](https://github.com/flyboy-byte/riscv-pico/releases/tag/apps-v1), [`apps-v2`](https://github.com/flyboy-byte/riscv-pico/releases/tag/apps-v2) | Older loose binaries. Everything current is in `sdcard-v2`. |
 
-Firmware `-v5` boots `sdcard-v2` fine, but nano on its VGA screen is unusable. `-v3`/`-v4` still boot too. `-v1`/`-v2` are superseded single-chip 8 MB builds that
-don't boot the current rootfs.
+Firmware `-v5` boots `sdcard-v2`, but nano on its VGA screen is unusable. `-v3`/`-v4` still boot
+too. `-v1`/`-v2` are superseded single-chip 8 MB builds that don't boot the current rootfs.
 
 ---
 

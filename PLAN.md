@@ -34,6 +34,12 @@ verified. `sdcard-v2` and `boards-v6` taken out of pre-release. Four photos of t
 machine (sysinfo, nano, BASIC + c4, minesweeper) added to the README under `docs/images/screen-*`,
 resized to 1600 px and stripped of metadata. The phone originals sit untracked in the repo root.
 
+**Project on hold as of 2026-09-16.** The user considers it done until they resume, and asked for
+no growth in the meantime. Future directions they named, not started: **a perfboard build** of
+the same circuit, then **a 3D-printed enclosure** for it. The website became a blog-style story
+with photos; the build guide lives in the README ("Build one yourself": six steps, SD card, first
+boot, troubleshooting).
+
 **Next session starts here:** nothing is blocked. Open threads, pick any: `usleep` for c4 (so a c4
 blink is visible), the busybox rootfs trim (needs the user's add/drop list), `mines.lua` code lines
 wider than 53 columns, the RP2350 boards (never flashed), and the untracked `AGENTS.md`.
