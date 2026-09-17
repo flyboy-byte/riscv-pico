@@ -17,7 +17,11 @@ Line 0 of the GPIO chip is **Pico GP1, physical pin 2**. The four guest-usable l
 ## GPIO
 
 Two interfaces, both real Linux. Only one can hold a line at a time, so if `gpioget` says the line
-is busy, something exported it through sysfs first.
+is busy, something exported it through sysfs first. Release it with:
+
+```sh
+echo 512 > /sys/class/gpio/unexport   # 513, 514, 515 for the other lines
+```
 
 ```sh
 # the modern chardev interface
@@ -152,12 +156,13 @@ happened once and left a broken directory entry behind.
 
 ### nano on the VGA screen
 
-The screen is 53 columns by 30 rows, but the guest still thinks it's 80 by 24, so long lines don't
-wrap correctly. Untested workaround:
+**nano does not work properly on the VGA screen yet.** The VGA terminal only understands four escape
+sequences, and nano sends many more. They show up as garbage, and the screen can scroll until nano is
+out of view. Setting `COLUMNS=53 LINES=30` was tested on 2026-09-16 and doesn't help. nano works fine
+over the USB serial console.
 
-```sh
-COLUMNS=53 LINES=30 nano notes.txt
-```
+If the screen gets stuck, nano is probably still running. Type blind: **Ctrl+X**, then **N** if it
+asks to save, then `clear`.
 
 ---
 

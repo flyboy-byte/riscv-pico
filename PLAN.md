@@ -8,18 +8,26 @@ and read back on that setup. Milestones: Linux on real hardware (2026-08-27), gu
 pins (2026-08-29), PS/2 keyboard (2026-09-11), VGA and standalone (2026-09-14) — see "Console
 bring-up" directly below.
 
-**SD card rewritten 2026-09-14/15 with the no-network kernel and new apps — NOT yet booted on
-hardware.** Harness-verified only; the user will test and report. On the card: the no-network kernel,
-Lua with `sys.sleep`/`sys.ms`/`sys.raw`, c4 with `for` + `write`, BASIC with `BYE`, minesweeper at
-`/root/mines.lua`, and `/root/help.txt`. Published as the `sdcard-v1` pre-release, whose assets were
-re-uploaded on 09-15 to match. See "No-network kernel, Lua `sys`, c4" below, and
-`docs/CHEATSHEET.md` for the command reference.
+**SD card from 2026-09-14/15 booted on hardware 2026-09-16.** On it: the no-network kernel, Lua
+with `sys.sleep`/`sys.ms`/`sys.raw`, c4 with `for` + `write`, BASIC with `BYE`, minesweeper at
+`/root/mines.lua`, and `/root/help.txt` (published as the `sdcard-v1` pre-release). User report:
+Lua blink works, GPIO works, minesweeper "worked great", and `sync` then `halt` shut down cleanly.
+Three problems:
+- **`gpioset` said the line was busy after `blink.lua` ran.** blink exported GPIO 512 through sysfs
+  and never released it. Fixed in the repo 2026-09-16 (blink now unexports it); the card still has
+  the old copy. Workaround on the card: `echo 512 > /sys/class/gpio/unexport`.
+- **nano is unusable on VGA, and `COLUMNS=53 LINES=30` changed nothing.** The screen eventually
+  scrolled until nano was out of view, and only a power-off recovered it. Cause: `terminal.c` is
+  the bug, not the terminal size. See "Known issue" under Console bring-up.
+- **"couldn't edit or see any files in /sys", and unsure whether root is writable.** Not
+  diagnosed yet; need the exact command used. `/` is remounted read-write by `inittab`, and nano
+  saved a file there on 09-14, so root was writable then.
 
-**Next session starts here:** ask how the hardware boot went. If it works, flip `sdcard-v1` out of
-pre-release and mark the `Programming on the Pico` and `Slimmer kernel` rows verified in README.md
-and `site/index.html`. Open threads, smallest first: the nano/`COLUMNS` fix on VGA (untested
-one-liner), `usleep` for c4, the busybox rootfs trim (needs the user's add/drop list), a photo of the
-standalone machine for the README, and the still-untracked `AGENTS.md`.
+**Next session starts here:** the VGA terminal fix (see "Known issue"), then rewrite the card so it
+gets the fixed `blink.lua`. The user has photos for the README (location not yet known; strip EXIF
+before committing). Other open threads: `usleep` for c4, the busybox rootfs trim (needs the user's
+add/drop list), and the still-untracked `AGENTS.md`. Flip `sdcard-v1` out of pre-release once the
+card is rewritten.
 The dated milestone notes that follow are history in order; the software block describes the state as
 of 2026-08-17 and is still accurate for what it covers.
 
@@ -88,12 +96,21 @@ back. Keyboard in, display out, own power: the standalone machine this project w
 Reading the column bottom to top, V/H/R/G/B maps onto GP16-20 in order, so the jumpers run parallel
 with no crossings. The one gap on the Pico side, physical pin 23, is ground.
 
-**Known issue, not yet fixed: nano doesn't wrap on the VGA console.** The VGA terminal is **53×30**
-(320×240 at a 6×8 font, `vga.h`). Most likely the guest tty still assumes 80×24, so nano draws past
-the right edge. Candidate fix, **untested**: `stty cols 53 rows 30` on the VGA console before
-starting nano, then a shell profile line if it works. Separately, the VGA terminal emulator in
-`terminal.c` only implements CSI `J`, `K`, `H` and `m`, so full-screen redraws that use other escape
-sequences may still render imperfectly even at the right size.
+**Known issue, not yet fixed: nano is unusable on the VGA console.** ~~Candidate fix: set the size
+with `stty` / `COLUMNS=53 LINES=30`~~ — tested 2026-09-16, no effect (and `stty` isn't installed).
+The real cause is `terminal.c` (INFERRED from the source, not yet captured on the wire):
+- It implements only CSI `J`, `K`, `H` and `m`. busybox init sets `TERM=linux`, so nano also sends
+  scroll regions (`r`), insert/delete line (`L`/`M`), relative cursor moves, and `ESC 7`/`ESC 8`.
+  Those are ignored, so redraws land in the wrong place.
+- **Its CSI parser breaks on private sequences like `ESC[?25l`.** It stores the `?`, stops, then
+  swallows the next digit as if it were the final byte, and prints the rest (`5l`) as text.
+- Writing at the bottom row scrolls the whole screen. With no scroll regions, nano's screen drifts
+  upward until it is out of view.
+
+Plan: capture nano's actual output with `TERM=linux` in the desktop harness, then extend `runCSI`
+to cover those sequences, fix the parser for `?`, and test `terminal.c` on the desktop against a
+fake VGA buffer before flashing. Recovery on the current firmware: type Ctrl+X blind, then N, then
+`clear`.
 
 **Status: the PS/2 keyboard works, verified on real hardware 2026-09-11.** Typed into GNU nano
 running in guest Linux over the keyboard, with output on the USB serial console. First real

@@ -20,4 +20,6 @@ for i = 1, times do
   write(base .. "gpio512/value", "0")
   sys.sleep(0.2)
 end
+-- hand the line back, or gpioset/gpioget will report it busy until reboot
+write(base .. "unexport", "512")
 print("blinked " .. times .. " times")
