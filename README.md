@@ -84,7 +84,7 @@ What's actually verified, versus what merely compiles. No wishful thinking in th
 | ✅ | **Custom kernel drivers** | Block device, GPIO, second console channel — real Linux drivers, not shims. |
 | ✅ | **Desktop harness** | Boots the same kernel on your PC in about a second. No hardware needed. |
 | ✅ | **SSD1306 OLED panel** | A live stats visualizer. Not essential, just fun. |
-| ✅ | **Programming on the Pico** | Lua with sleep and raw key input, and GPIO from Lua and the shell, verified on hardware. Minesweeper too. The c4 C compiler and BASIC's exit command run in the harness and haven't been reported from hardware yet. |
+| ✅ | **Programming on the Pico** | Lua with sleep and raw key input, GPIO from Lua and the shell, the c4 C compiler, BASIC's `BYE`, and minesweeper. All verified on hardware. |
 | ✅ | **Slimmer kernel** | Networking removed, about 1 MB of RAM back. Boots on hardware. |
 | 🚧 | **`pico2` / `pico2_w` (RP2350)** | Builds clean for all four board targets. Never actually flashed. |
 | ❌ | **Networking on the Pico** | Removed on purpose for the RAM. The stack and a half-built host bridge live on in [`net-v1`](https://github.com/flyboy-byte/riscv-pico/releases/tag/net-v1). |

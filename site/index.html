@@ -588,7 +588,7 @@
           <tr><td class="state ok">WORKING</td><td><strong>VGA console</strong></td><td>Through a <a href="https://www.amazon.com/Breakout-Resistors-Serial-Wombat-Arduino/dp/B0D4F7H59M">PCB_0024</a> breakout. No firmware change</td></tr>
           <tr><td class="state wip">PENDING</td><td><strong>nano on the VGA screen</strong></td><td>Firmware v6 rewrote the VGA terminal as a VT102 and sizes the console to 53×30. Matches a reference emulator on recorded nano sessions; first hardware run pending</td></tr>
           <tr><td class="state ok">WORKING</td><td><strong>Fully standalone</strong></td><td>Own keyboard, screen and power. A file edited, saved and read back with no PC attached</td></tr>
-          <tr><td class="state ok">WORKING</td><td><strong>Programming on the Pico</strong></td><td>Verified 2026-09-16: Lua with sleep, GPIO from Lua and the shell, minesweeper. c4 and BASIC's BYE not yet reported from hardware</td></tr>
+          <tr><td class="state ok">WORKING</td><td><strong>Programming on the Pico</strong></td><td>Verified 2026-09-16: Lua with sleep, GPIO from Lua and the shell, c4 compiling and running C, BASIC's BYE, and minesweeper</td></tr>
           <tr><td class="state no">BY CHOICE</td><td><strong>Networking on the Pico</strong></td><td>Removed from the kernel to free about 1 MB of RAM. Still in the harness networking image</td></tr>
           <tr><td class="state wip">PENDING</td><td><strong>RP2350 boards</strong></td><td>Builds clean for all four targets. Never flashed</td></tr>
           <tr><td class="state no">BY CHOICE</td><td><strong>I²C, PWM and ADC for the guest</strong></td><td>Scoped on paper and deliberately not built</td></tr>
@@ -619,7 +619,6 @@
     <h2>What's next</h2>
     <ul>
       <li><strong>nano on the VGA screen, on hardware.</strong> Firmware v6's new terminal passes every recorded nano session on the desktop. It needs a run on the real screen.</li>
-      <li><strong>c4 and BASIC on hardware.</strong> Both are on the card and work in the harness, but nobody has reported running them on the Pico yet.</li>
       <li><strong>RP2350.</strong> Four board targets build clean. None have been flashed, so the claim stays marked unverified.</li>
     </ul>
     <p>Explicitly not on the list: turning this into a framework, a build system, or a general-purpose emulator project. It is a bring-up and porting workbench and the scope fence is written into the repo.</p>

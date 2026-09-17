@@ -9,8 +9,8 @@ pins (2026-08-29), PS/2 keyboard (2026-09-11), VGA and standalone (2026-09-14) â
 bring-up" directly below.
 
 **SD card from 2026-09-14/15 (`sdcard-v1`) booted on hardware 2026-09-16.** User report: Lua blink
-works, GPIO works, minesweeper "worked great", and `sync` then `halt` shut down cleanly. c4 and
-BASIC's `BYE` weren't mentioned, so they are still harness-only. Three problems, all handled the
+works, GPIO works, minesweeper "worked great", and `sync` then `halt` shut down cleanly. c4 (hello world and more) and
+BASIC's `BYE` were confirmed on hardware in a follow-up report the same day. Three problems, all handled the
 same day:
 - **`gpioset` said the line was busy after `blink.lua` ran.** blink exported GPIO 512 through sysfs
   and never released it. ~~Open~~ â€” FIXED 2026-09-16: blink and `gpio_toggle.c` now unexport.
@@ -29,8 +29,7 @@ only), `help.txt`, `gpio_set.c` and `gpio_toggle.c`. Public copy without the use
 `sdcard-v2`. Firmware: `pico-rv32ima-boards-v6`. **The user still has to flash v6**: BOOTSEL, then
 copy `firmware/out/pico-rv32ima-pico.uf2`.
 
-**Next session starts here:** ask how nano on VGA went with v6 flashed, and whether c4 and `BYE`
-were tried. If nano works, flip the "nano on the VGA screen" row in README.md and `site/index.html`
+**Next session starts here:** ask how nano on VGA went with v6 flashed. If nano works, flip the "nano on the VGA screen" row in README.md and `site/index.html`
 to verified, and take `sdcard-v2` and `boards-v6` out of pre-release. The user is working on
 README photos (strip EXIF before committing). Other open threads: `usleep` for c4, the busybox
 rootfs trim (needs the user's add/drop list), `mines.lua` still has code lines wider than 53
