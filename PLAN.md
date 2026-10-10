@@ -44,6 +44,15 @@ boot, troubleshooting).
 extending c4), the PS/2 pinout diagram `.webp` and the user's `ps2-pinout` wire note now live in
 `~/.riscv-pico-scratch/notes/`. The full-size phone photos are in `~/Pictures/riscv-pico/`.
 
+**Scratch pruned 2026-10-10.** `~/.riscv-pico-scratch` is down to 8.4 GB, nearly all of it the
+buildroot toolchain. Deleted: the finished harness test runs (`work/test*`, `work/quickstart-test`,
+`work/term`, `work/fsck`), `work/card-staging`, the Lua build tree, and the release staging dirs
+(`work/release-sdcard-v{1,2}`, `work/release-boards-v6`) — every release artifact is published and
+checksum-verified on the GitHub releases page, so paths like those mentioned further down this
+document are gone. **Kept:** `repo/buildroot` (the cross-compiler — never delete, it is hours to
+rebuild), `backups/sd-2026-09-{14,16}` (the card as it was, including the user's own files that
+ship in no release), `notes/`, and `work/{bin,c4,blink.lua,help.txt}`.
+
 **Upstream checked 2026-09-16: nothing new.** `pico-rv32ima` (e6f6d1b), `tiny-rv32ima` (565440c),
 `pico-linux` (5d4eda1), `tvlad1234/c4` (30b22b7) and `buildroot-tiny-rv32ima` (ad36342, same as the
 local checkout) all match what is vendored here. Upstream's last commits are from 2025-08.
