@@ -117,10 +117,10 @@ rootfs → boot → run, live in the web console). It's not checked into the rep
 persist between sessions** at `/home/logan/.riscv-pico-scratch/repo/buildroot` — re-verified
 working 2026-08-27 (GCC 13.3.0, wchar enabled, `elf2flt` present; compiled `apps/hello.c` to a
 valid bFLT and ran it in the harness), and again 2026-10-28 after a disk prune emptied buildroot's
-`output/build` — the compiler itself is unaffected; see PLAN.md's "Scratch pruned" note. **Check that path before rebuilding anything** — a full
-toolchain rebuild is hours of work and is usually unnecessary. The exact recipe, plus two hard-won gotchas about
-not running concurrent `make toolchain` invocations, are in PLAN.md's "Cross-compile toolchain"
-section. Don't rediscover this from scratch — read that section first.
+`output/build` — the compiler itself is unaffected; see PLAN.md's "Scratch pruned" note.
+**Check that path before rebuilding anything** — a full toolchain rebuild is hours of work and is
+usually unnecessary. The exact recipe, plus two hard-won gotchas about not running concurrent
+`make toolchain` invocations, are in PLAN.md's "Cross-compile toolchain" section. Don't rediscover this from scratch — read that section first.
 
 Why this exists and not something built on stock `cnlohr/mini-rv32ima`: that builds natively in
 seconds too, and boots cnlohr's own images fine, but **not either project's** — `tiny-rv32ima` adds
