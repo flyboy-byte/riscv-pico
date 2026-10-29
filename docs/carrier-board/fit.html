@@ -1,0 +1,631 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Pico Board Fit</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans+Condensed:wght@400;500;600&display=swap">
+<style>
+/* Layout: one to-scale board on top, controls above it, live fit verdict and an editable parts list below. */
+:root {
+  --bg: #EEF2F0;
+  --surface: #FFFFFF;
+  --fg: #13211C;
+  --muted: #55665F;
+  --line: #CBD6D1;
+  --accent: #1F7A58;
+  --ok: #1F7A58;
+  --warn: #9A6410;
+  --bad: #C62F3B;
+  --board: #14201C;
+  --board-edge: #33463F;
+  --hole: #B8923F;
+  --c-pico: #2E9E6B;
+  --c-ram: #3B82C4;
+  --c-sd: #B97F17;
+  --c-oled: #8B6FD1;
+  --c-vga: #C9556B;
+  --c-ps2: #1B9794;
+  --c-lvl: #6F7F89;
+  --sans: "IBM Plex Sans Condensed", "Arial Narrow", system-ui, sans-serif;
+  --mono: "IBM Plex Mono", ui-monospace, "SFMono-Regular", Menlo, monospace;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #0C1210; --surface: #141C19; --fg: #E4ECE8; --muted: #93A59D; --line: #26332E;
+    --accent: #4CC38F; --ok: #4CC38F; --warn: #E5B04A; --bad: #FF6B6B; --board-edge: #3B514A;
+    color-scheme: dark;
+  }
+}
+:root[data-theme="dark"] {
+  --bg: #0C1210; --surface: #141C19; --fg: #E4ECE8; --muted: #93A59D; --line: #26332E;
+  --accent: #4CC38F; --ok: #4CC38F; --warn: #E5B04A; --bad: #FF6B6B; --board-edge: #3B514A;
+  color-scheme: dark;
+}
+body { margin: 0; background: var(--bg); color: var(--fg); font-family: var(--sans); font-size: 15px; line-height: 1.45; }
+.wrap {
+  max-width: 980px; margin: 0 auto; padding-block: 20px 36px;
+  padding-left: max(16px, env(safe-area-inset-left, 0px));
+  padding-right: max(16px, env(safe-area-inset-right, 0px));
+  display: flex; flex-direction: column; gap: 14px;
+}
+h1 { margin: 0; font-size: 26px; font-weight: 600; letter-spacing: -0.01em; text-wrap: balance; }
+.sub { margin: 4px 0 0; color: var(--muted); max-width: 62ch; }
+.bar { display: flex; flex-wrap: wrap; gap: 10px 14px; align-items: flex-end; }
+.field { display: flex; flex-direction: column; gap: 3px; min-width: 0; }
+.field > span { font-size: 11px; letter-spacing: 0.08em; text-transform: uppercase; color: var(--muted); }
+select, input[type="number"], button {
+  font: inherit; color: var(--fg); background: var(--surface);
+  border: 1px solid var(--line); border-radius: 6px; padding: 7px 10px; min-height: 36px;
+}
+input[type="number"] { font-family: var(--mono); font-size: 14px; width: 74px; padding: 6px 8px; }
+button { cursor: pointer; font-weight: 500; }
+button:hover:not(:disabled) { border-color: var(--accent); }
+button.primary { background: var(--accent); border-color: var(--accent); color: #fff; }
+button:disabled { opacity: 0.45; cursor: default; }
+:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.dims { font-family: var(--mono); font-size: 13px; color: var(--muted); }
+.stage { background: var(--surface); border: 1px solid var(--line); border-radius: 10px; padding: 10px; }
+svg#board { display: block; touch-action: none; width: 100%; height: auto; max-height: 76vh; user-select: none; -webkit-user-select: none; }
+.part { cursor: grab; touch-action: none; }
+.rot-handle { cursor: pointer; }
+.routing { display: flex; flex-direction: column; gap: 7px; background: var(--surface); border: 1px solid var(--line); border-radius: 10px; padding: 10px 12px; }
+.rrow { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 14px; font-size: 13px; }
+.rn { min-width: 84px; font-weight: 600; }
+.rv { font-family: var(--mono); color: var(--muted); font-size: 12.5px; }
+.rv.bad { color: var(--bad); }
+.chk { display: flex; align-items: center; gap: 6px; min-height: 36px; }
+.part:active { cursor: grabbing; }
+.verdict { display: flex; flex-direction: column; gap: 8px; }
+.pill { align-self: flex-start; padding: 5px 12px; border-radius: 999px; font-weight: 600; font-size: 14px; border: 1px solid currentColor; }
+.pill.ok { color: var(--ok); } .pill.warn { color: var(--warn); } .pill.bad { color: var(--bad); }
+.verdict ul { margin: 0; padding-left: 18px; color: var(--fg); display: flex; flex-direction: column; gap: 2px; }
+.cover { color: var(--muted); font-size: 13px; }
+h2 { margin: 6px 0 0; font-size: 12px; letter-spacing: 0.1em; text-transform: uppercase; color: var(--muted); font-weight: 600; }
+.list { display: flex; flex-direction: column; border: 1px solid var(--line); border-radius: 10px; background: var(--surface); }
+.row { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 14px; padding: 10px 12px; border-top: 1px solid var(--line); }
+.row:first-child { border-top: 0; }
+.row.sel { box-shadow: inset 3px 0 0 var(--accent); }
+.nmwrap { display: flex; align-items: center; gap: 9px; flex: 1 1 210px; min-width: 0; }
+.nm { cursor: pointer; overflow-wrap: anywhere; }
+.sw { width: 12px; height: 12px; border-radius: 3px; flex: none; }
+.size { display: flex; align-items: center; gap: 6px; font-family: var(--mono); font-size: 13px; color: var(--muted); }
+.src { font-size: 12px; color: var(--muted); min-width: 52px; }
+.dom { flex: 1 1 100%; font-size: 12px; color: var(--muted); padding-left: 21px; }
+.note { color: var(--muted); font-size: 13px; max-width: 70ch; margin: 0; }
+@media (max-width: 520px) { h1 { font-size: 22px; } input[type="number"] { width: 68px; } }
+@media (prefers-reduced-motion: reduce) { * { transition: none !important; animation: none !important; } }
+</style>
+</head>
+<body>
+<main class="wrap">
+  <header>
+    <h1>Pico board fit</h1>
+    <p class="sub">Drag parts around the board, drawn to scale (one hole is 2.54 mm). Lines are the connections from the repo pinout. A red circle is a crossing, which on one layer means a jumper wire.</p>
+  </header>
+
+  <section class="bar" aria-label="Board and tools">
+    <label class="field"><span>Board</span>
+      <select id="boardSel">
+        <option value="ecfull">ElectroCookie full, 3.8 × 3.5 in</option>
+        <option value="ech">ElectroCookie half</option>
+        <option value="ecq">ElectroCookie quarter</option>
+        <option value="euro">Eurocard, 160 × 100 mm</option>
+        <option value="custom">Custom size</option>
+      </select>
+    </label>
+    <label class="field"><span>Width mm</span><input id="bw" type="number" min="20" max="400" step="0.1"></label>
+    <label class="field"><span>Height mm</span><input id="bh" type="number" min="20" max="400" step="0.1"></label>
+    <button id="opt" class="primary" type="button">Optimize routing</button>
+    <button id="pack" type="button">Auto-arrange</button>
+    <label class="chk"><input type="checkbox" id="showNets" checked> Show connections</label>
+    <button id="rot" type="button" disabled>Rotate</button>
+  </section>
+  <div class="dims" id="bdims"></div>
+
+  <section class="stage"><svg id="board" viewBox="0 0 100 100" role="img" aria-label="Top view of the board with the parts placed on it"><g id="layer"></g></svg></section>
+
+  <section class="verdict" id="status" aria-live="polite"></section>
+  <section class="routing" id="routing" aria-live="polite"></section>
+
+  <h2>Parts</h2>
+  <section class="list" id="list"></section>
+  <p class="note">Sizes marked est. are typical for these kinds of modules, so measure yours and type them in. Only the Pico's pin positions are exact. Pins on the SD, OLED, VGA, converter and PSRAM boards follow typical layouts. The ElectroCookie size comes from a retailer listing. The PS/2 screw-terminal breakout from the cart had no size listed. Power and clock notes under each part come from the riscv-pico docs, and they matter for placement as much as size does.</p>
+</main>
+
+<script>
+(function () {
+  var G = 2.54, O = 1.27, EDGE = 6;
+  var BOARDS = {
+    ecfull: { w: 96.5, h: 88.9 },
+    ech: { w: 96.5, h: 44.5 },
+    ecq: { w: 48.3, h: 44.5 },
+    euro: { w: 160, h: 100 },
+    custom: null
+  };
+  var PS2 = {
+    jack: { w: 14, h: 17, name: 'PS/2 mini-DIN jack' },
+    screw: { w: 30, h: 27, name: 'PS/2 screw-terminal breakout' }
+  };
+  var B = { w: BOARDS.ecfull.w, h: BOARDS.ecfull.h };
+  var parts = [
+    { id: 'pico', dom: 'Pico 3V3 and ground reference. Runs overclocked.', name: 'Raspberry Pi Pico H', short: 'Pico', w: 51, h: 21, color: '--c-pico', src: 'official', fixed: true, edge: true },
+    { id: 'vga', dom: 'Ground only, no power draw. PIO pixel clock in the tens of MHz.', name: 'VGA breakout (PCB_0024)', short: 'VGA', w: 40, h: 38, color: '--c-vga', src: 'est.', edge: true },
+    { id: 'oled', dom: 'Separate 3.3 V supply. I2C, slow.', name: 'SSD1306 OLED, 0.96 in', short: 'OLED', w: 27.5, h: 28, color: '--c-oled', src: 'est.' },
+    { id: 'sd', dom: 'Separate 3.3 V supply. SPI. MOSI and CLK cross over on the module.', name: 'microSD module', short: 'SD', w: 23, h: 32, color: '--c-sd', src: 'est.' },
+    { id: 'ps2', dom: '5 V keyboard supply. Clock about 10 to 16 kHz.', name: 'PS/2 mini-DIN jack', short: 'PS/2', w: 14, h: 17, color: '--c-ps2', src: 'est.', edge: true, variant: 'jack' },
+    { id: 'lvl', dom: 'Low side on the Pico 3V3, high side on 5 V.', name: 'BSS138 level converter', short: 'BSS138', w: 13, h: 15, color: '--c-lvl', src: 'est.' },
+    { id: 'ram1', dom: 'Pico 3V3 with its own decoupling. SPI at 20 MHz, the most timing-sensitive bus.', name: 'PSRAM on DIP adapter 1', short: 'RAM 1', w: 10.5, h: 12, color: '--c-ram', src: 'est.' },
+    { id: 'ram2', dom: 'Pico 3V3 with its own decoupling. Shares the SPI bus with RAM 1.', name: 'PSRAM on DIP adapter 2', short: 'RAM 2', w: 10.5, h: 12, color: '--c-ram', src: 'est.' }
+  ];
+  parts.forEach(function (p, i) { p.on = true; p.rot = 0; p.x = 0; p.y = 0; p.z = i; });
+  var zc = parts.length, sel = null, drag = null;
+
+  var svg = document.getElementById('board'), layer = document.getElementById('layer');
+  var statusEl = document.getElementById('status'), listEl = document.getElementById('list');
+  var boardSel = document.getElementById('boardSel'), bw = document.getElementById('bw'), bh = document.getElementById('bh');
+  var rotBtn = document.getElementById('rot'), bdims = document.getElementById('bdims');
+
+  function byId(id) { for (var i = 0; i < parts.length; i++) if (parts[i].id === id) return parts[i]; return null; }
+  function dims(p) { return p.rot % 2 ? { w: p.h, h: p.w } : { w: p.w, h: p.h }; }
+  function rect(p) { var d = dims(p); return { x: p.x, y: p.y, w: d.w, h: d.h }; }
+  function snap(v) { return Math.round((v - O) / G) * G + O; }
+  function overlap(a, b) { return a.x < b.x + b.w - 0.01 && a.x + a.w > b.x + 0.01 && a.y < b.y + b.h - 0.01 && a.y + a.h > b.y + 0.01; }
+  function esc(s) { return String(s).replace(/[&<>"]/g, function (c) { return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]; }); }
+  function mm(v) { return (Math.round(v * 10) / 10) + ''; }
+
+  function autopack() {
+    var on = parts.filter(function (p) { return p.on; });
+    on.forEach(function (p) { p.rot = 0; });
+    var pico = byId('pico'); pico.rot = B.w >= B.h ? 0 : 1;
+    var order = on.slice().sort(function (a, b) { return b.w * b.h - a.w * a.h; });
+    var cx = 0, cy = 0, rowH = 0;
+    order.forEach(function (p) {
+      var d = dims(p);
+      if (cx > 0 && O + cx * G + d.w > B.w - O) { cx = 0; cy += rowH; rowH = 0; }
+      p.x = O + cx * G; p.y = O + cy * G;
+      cx += Math.ceil(d.w / G) + 1;
+      rowH = Math.max(rowH, Math.ceil(d.h / G) + 1);
+    });
+  }
+
+  function findSpot(p) {
+    var d = dims(p), others = parts.filter(function (q) { return q.on && q !== p; });
+    for (var y = O; y + d.h <= B.h; y += G) {
+      for (var x = O; x + d.w <= B.w; x += G) {
+        var r = { x: x, y: y, w: d.w, h: d.h }, hit = false;
+        for (var i = 0; i < others.length; i++) if (overlap(r, rect(others[i]))) { hit = true; break; }
+        if (!hit) { p.x = x; p.y = y; return; }
+      }
+    }
+    p.x = O; p.y = O;
+  }
+
+  var NM = null, showNets = true;
+  var PICO_PIN = { GP0: 1, GP2: 4, GP3: 5, GP4: 6, GP10: 14, GP11: 15, GP12: 16, GP13: 17, GP14: 19, GP16: 21, GP17: 22, GP18: 24, GP19: 25, GP20: 26, GP21: 27, GP26: 31, GP27: 32, GP28: 34, '3V3': 36, VSYS: 39 };
+  var GROUPS = { sd: ['SD card', '--c-sd'], ram: ['PSRAM bus', '--c-ram'], vga: ['VGA', '--c-vga'], ps2: ['PS/2', '--c-ps2'], oled: ['OLED', '--c-oled'], pwr: ['Power', '--warn'] };
+  var NETS = [
+    ['sd', 'SD CS', [['pico', 'GP0'], ['sd', 'CS']]],
+    ['sd', 'SD SCK', [['pico', 'GP2'], ['sd', 'SCK']]],
+    ['sd', 'SD MOSI', [['pico', 'GP3'], ['sd', 'MOSI']]],
+    ['sd', 'SD MISO', [['pico', 'GP4'], ['sd', 'MISO']]],
+    ['ram', 'PSRAM SCLK', [['pico', 'GP10'], ['ram1', 'SCLK'], ['ram2', 'SCLK']]],
+    ['ram', 'PSRAM SI', [['pico', 'GP11'], ['ram1', 'SI'], ['ram2', 'SI']]],
+    ['ram', 'PSRAM SO', [['pico', 'GP12'], ['ram1', 'SO'], ['ram2', 'SO']]],
+    ['ram', 'PSRAM CE1', [['pico', 'GP13'], ['ram1', 'CE']]],
+    ['ram', 'PSRAM CE2', [['pico', 'GP14'], ['ram2', 'CE']]],
+    ['vga', 'VGA VSYNC', [['pico', 'GP16'], ['vga', 'V']]],
+    ['vga', 'VGA HSYNC', [['pico', 'GP17'], ['vga', 'H']]],
+    ['vga', 'VGA R', [['pico', 'GP18'], ['vga', 'R']]],
+    ['vga', 'VGA G', [['pico', 'GP19'], ['vga', 'G']]],
+    ['vga', 'VGA B', [['pico', 'GP20'], ['vga', 'B']]],
+    ['ps2', 'PS/2 DATA (3.3 V side)', [['pico', 'GP26'], ['lvl', 'LV1']]],
+    ['ps2', 'PS/2 CLK (3.3 V side)', [['pico', 'GP27'], ['lvl', 'LV2']]],
+    ['ps2', 'PS/2 DATA (5 V side)', [['lvl', 'HV1'], ['ps2', 'DATA']]],
+    ['ps2', 'PS/2 CLK (5 V side)', [['lvl', 'HV2'], ['ps2', 'CLK']]],
+    ['oled', 'OLED SDA', [['pico', 'GP28'], ['oled', 'SDA']]],
+    ['oled', 'OLED SCL', [['pico', 'GP21'], ['oled', 'SCL']]],
+    ['pwr', '3V3', [['pico', '3V3'], ['ram1', 'VDD'], ['ram2', 'VDD'], ['lvl', 'LV']]],
+    ['pwr', '5V', [['pico', 'VSYS'], ['lvl', 'HV'], ['ps2', '+5V']]]
+  ];
+
+  function localPin(p, name) {
+    var w = p.w, h = p.h, i;
+    function row(names, y, pitch) { i = names.indexOf(name); return i < 0 ? null : [w / 2 + (i - (names.length - 1) / 2) * pitch, y]; }
+    switch (p.id) {
+      case 'pico':
+        var n = PICO_PIN[name]; if (!n) return null;
+        var x0 = (w - 19 * G) / 2, ins = (h - 17.78) / 2;
+        return n <= 20 ? [x0 + (n - 1) * G, h - ins] : [x0 + (40 - n) * G, ins];
+      case 'sd': return row(['CS', 'MOSI', 'SCK', 'MISO', 'VCC', 'GND'], 1.3, G);
+      case 'oled': return row(['GND', 'VCC', 'SCL', 'SDA'], 1.3, G);
+      case 'vga': i = ['V', 'H', 'GND', 'R', 'G', 'B'].indexOf(name); return i < 0 ? null : [1.5, h / 2 + (i - 2.5) * G];
+      case 'lvl':
+        var a = row(['LV', 'LV1', 'LV2', 'GND'], 1.3, G); if (a) return a;
+        i = ['HV', 'HV1', 'HV2', 'GND'].indexOf(name); return i < 0 ? null : [w / 2 + (i - 1.5) * G, h - 1.3];
+      case 'ps2': return row(['DATA', 'CLK', '+5V', 'GND'], h - 1.5, p.variant === 'screw' ? 5 : G);
+      case 'ram1': case 'ram2':
+        i = ['CE', 'SO', 'SIO2', 'VSS', 'SI', 'SCLK', 'SIO3', 'VDD'].indexOf(name); if (i < 0) return null;
+        var y0 = (h - 3 * G) / 2;
+        return i < 4 ? [1.4, y0 + i * G] : [w - 1.4, y0 + (7 - i) * G];
+    }
+    return null;
+  }
+  function pinPos(p, name) {
+    var l = localPin(p, name); if (!l) return null;
+    var k = p.rot % 4, w = p.w, h = p.h, x, y;
+    if (k === 0) { x = l[0]; y = l[1]; } else if (k === 1) { x = h - l[1]; y = l[0]; }
+    else if (k === 2) { x = w - l[0]; y = h - l[1]; } else { x = l[1]; y = w - l[0]; }
+    return { x: p.x + x, y: p.y + y };
+  }
+  function netData() {
+    var out = [];
+    NETS.forEach(function (n) {
+      var pts = [];
+      n[2].forEach(function (pr) { var p = byId(pr[0]); if (!p || !p.on) return; var q = pinPos(p, pr[1]); if (q) pts.push(q); });
+      if (pts.length < 2) return;
+      var inT = [pts[0]], rest = pts.slice(1), segs = [], len = 0;
+      while (rest.length) {
+        var bi = 0, bj = 0, bd = 1e9;
+        for (var i = 0; i < inT.length; i++) for (var j = 0; j < rest.length; j++) {
+          var d = Math.abs(inT[i].x - rest[j].x) + Math.abs(inT[i].y - rest[j].y);
+          if (d < bd) { bd = d; bi = i; bj = j; }
+        }
+        segs.push([inT[bi], rest[bj]]); len += bd; inT.push(rest.splice(bj, 1)[0]);
+      }
+      out.push({ g: n[0], name: n[1], pts: pts, segs: segs, len: len });
+    });
+    return out;
+  }
+  function ccw(a, b, c) { return (c.y - a.y) * (b.x - a.x) - (b.y - a.y) * (c.x - a.x); }
+  function same(a, b) { return Math.abs(a.x - b.x) < 0.01 && Math.abs(a.y - b.y) < 0.01; }
+  function cross(s, t) {
+    if (same(s[0], t[0]) || same(s[0], t[1]) || same(s[1], t[0]) || same(s[1], t[1])) return null;
+    var d1 = ccw(s[0], s[1], t[0]), d2 = ccw(s[0], s[1], t[1]), d3 = ccw(t[0], t[1], s[0]), d4 = ccw(t[0], t[1], s[1]);
+    if (d1 * d2 < 0 && d3 * d4 < 0) { var u = d3 / (d3 - d4); return { x: s[0].x + (s[1].x - s[0].x) * u, y: s[0].y + (s[1].y - s[0].y) * u }; }
+    return null;
+  }
+  function netMetrics() {
+    var nets = netData(), X = [], g = {}, sig = 0, pw = 0;
+    Object.keys(GROUPS).forEach(function (k) { g[k] = { n: 0, len: 0, max: 0, min: 1e9, x: 0 }; });
+    nets.forEach(function (n) { var r = g[n.g]; r.n++; r.len += n.len; r.max = Math.max(r.max, n.len); r.min = Math.min(r.min, n.len); });
+    for (var a = 0; a < nets.length; a++) for (var b = a + 1; b < nets.length; b++) {
+      var na = nets[a], nb = nets[b];
+      na.segs.forEach(function (s) { nb.segs.forEach(function (t) {
+        var c = cross(s, t);
+        if (c) { X.push(c); g[na.g].x++; g[nb.g].x++; if (na.g === 'pwr' || nb.g === 'pwr') pw++; else sig++; }
+      }); });
+    }
+    return { nets: nets, X: X, g: g, sig: sig, pw: pw };
+  }
+  function cost(m) {
+    var L = 0; m.nets.forEach(function (n) { L += n.g === 'pwr' ? 0.4 * n.len : n.len; });
+    return L + 25 * m.sig + 6 * m.pw;
+  }
+  function netsSVG(m) {
+    if (!showNets) return '';
+    var h = '';
+    m.nets.forEach(function (n) {
+      var col = GROUPS[n.g][1], dash = n.g === 'pwr' ? ' stroke-dasharray="1.2 0.8"' : '';
+      n.segs.forEach(function (s) {
+        var d = 'M' + s[0].x + ' ' + s[0].y + 'L' + s[1].x + ' ' + s[1].y;
+        h += '<path d="' + d + '" fill="none" stroke="rgba(0,0,0,0.55)" stroke-width="0.9" stroke-linecap="round"/><path d="' + d + '" fill="none" style="stroke:var(' + col + ')" stroke-width="0.45" stroke-linecap="round"' + dash + '/>';
+      });
+      n.pts.forEach(function (q) { h += '<circle cx="' + q.x + '" cy="' + q.y + '" r="0.55" fill="#fff" stroke="rgba(0,0,0,0.7)" stroke-width="0.2"/>'; });
+    });
+    m.X.forEach(function (c) { h += '<circle cx="' + c.x + '" cy="' + c.y + '" r="0.9" fill="none" style="stroke:var(--bad)" stroke-width="0.4"/>'; });
+    return h;
+  }
+  function drawRouting(m) {
+    var keys = Object.keys(GROUPS).filter(function (k) { return m.g[k].n; });
+    var cls, txt;
+    if (!keys.length) { document.getElementById('routing').innerHTML = ''; return; }
+    if (m.sig === 0) { cls = 'ok'; txt = 'No signal crossings. This layout can route on one layer.'; }
+    else { cls = 'warn'; txt = m.sig + ' signal crossing' + (m.sig === 1 ? '' : 's') + ': ' + (m.sig === 1 ? 'one jumper wire or 0 Ω link' : m.sig + ' jumper wires or 0 Ω links') + ' on a single layer.'; }
+    var rows = keys.map(function (k) {
+      var r = m.g[k];
+      return '<div class="rrow"><span class="sw" style="background:var(' + GROUPS[k][1] + ')"></span><span class="rn">' + GROUPS[k][0] + '</span><span class="rv">' + r.n + ' net' + (r.n === 1 ? '' : 's') + '</span><span class="rv">' + mm(r.len) + ' mm total</span><span class="rv">longest ' + mm(r.max) + ' mm</span><span class="rv' + (r.x ? ' bad' : '') + '">' + r.x + ' crossing' + (r.x === 1 ? '' : 's') + '</span></div>';
+    }).join('');
+    var ram = m.g.ram.n > 1 ? '<div class="cover">PSRAM nets run ' + mm(m.g.ram.min) + ' to ' + mm(m.g.ram.max) + ' mm, so the spread between them is ' + mm(m.g.ram.max - m.g.ram.min) + ' mm.</div>' : '';
+    document.getElementById('routing').innerHTML = '<div class="pill ' + cls + '">' + txt + '</div>' + rows + ram +
+      '<div class="cover">Straight lines between pins, lengths measured at right angles like real traces. A trace has width and must pass between pins, so treat zero crossings as necessary, not proof. Ground is not drawn: pour it or tie it at one point. SD and OLED power come from the separate supply and are not shown.</div>';
+  }
+  function penalty() {
+    var on = parts.filter(function (p) { return p.on; }), pen = 0;
+    for (var i = 0; i < on.length; i++) {
+      var r = rect(on[i]);
+      var iw = Math.max(0, Math.min(r.x + r.w, B.w - 0.5) - Math.max(r.x, 0.5)), ih = Math.max(0, Math.min(r.y + r.h, B.h - 0.5) - Math.max(r.y, 0.5));
+      pen += r.w * r.h - iw * ih;
+      for (var j = i + 1; j < on.length; j++) {
+        var q = rect(on[j]);
+        var ow = Math.min(r.x + r.w + 0.5, q.x + q.w) - Math.max(r.x - 0.5, q.x), oh = Math.min(r.y + r.h + 0.5, q.y + q.h) - Math.max(r.y - 0.5, q.y);
+        if (ow > 0 && oh > 0) pen += ow * oh;
+      }
+    }
+    return pen;
+  }
+  function valid() { return penalty() < 1e-6; }
+  function edgeDist(p) {
+    var r = rect(p);
+    if (p.id === 'pico') {
+      var ux = [r.x, r.x + r.w / 2, r.x + r.w, r.x + r.w / 2][p.rot], uy = [r.y + r.h / 2, r.y, r.y + r.h / 2, r.y + r.h][p.rot];
+      return Math.min(ux, uy, B.w - ux, B.h - uy);
+    }
+    return Math.min(r.x, r.y, B.w - r.x - r.w, B.h - r.y - r.h);
+  }
+  function edgeCost() {
+    var c = 0; parts.forEach(function (p) { if (p.on && p.edge) c += Math.max(0, edgeDist(p) - EDGE); });
+    return c;
+  }
+  function optimize(heavy) {
+    var on = parts.filter(function (p) { return p.on; });
+    function save() { return on.map(function (p) { return [p.x, p.y, p.rot]; }); }
+    function load(st) { on.forEach(function (p, i) { p.x = st[i][0]; p.y = st[i][1]; p.rot = st[i][2]; }); }
+    function total() { return cost(netMetrics()) + 3 * edgeCost(); }
+    function move(p) {
+      var r = Math.random();
+      if (r < 0.2) { var d0 = dims(p), cx = p.x + d0.w / 2, cy = p.y + d0.h / 2; p.rot = (p.rot + 1) % 4; var d1 = dims(p); p.x = snap(cx - d1.w / 2); p.y = snap(cy - d1.h / 2); }
+      else if (r < 0.4) { var d2 = dims(p); p.x = snap(Math.random() * Math.max(0, B.w - d2.w)); p.y = snap(Math.random() * Math.max(0, B.h - d2.h)); }
+      else { p.x += (Math.floor(Math.random() * 7) - 3) * G; p.y += (Math.floor(Math.random() * 7) - 3) * G; }
+    }
+    function feasible() {
+      var it, t, ok = valid();
+      for (t = 0; t < 8 && !ok; t++) {
+        var pc = penalty();
+        for (it = 0; it < 8000 && !ok; it++) {
+          var p = on[Math.floor(Math.random() * on.length)], ox = p.x, oy = p.y, orot = p.rot;
+          move(p);
+          var c = penalty(), T = 20 * Math.pow(0.01, it / 8000);
+          if (c <= pc || Math.random() < Math.exp((pc - c) / T)) { pc = c; ok = c < 1e-6; }
+          else { p.x = ox; p.y = oy; p.rot = orot; }
+        }
+      }
+      return ok;
+    }
+    function anneal(N, T0) {
+      var cur = total(), lb = save(), lc = cur;
+      for (var it = 0; it < N; it++) {
+        var q = on[Math.floor(Math.random() * on.length)], qx = q.x, qy = q.y, qr = q.rot, Tq = T0 * Math.pow(0.0005, it / N);
+        move(q);
+        if (!valid()) { q.x = qx; q.y = qy; q.rot = qr; continue; }
+        var cc = total();
+        if (cc < cur || Math.random() < Math.exp((cur - cc) / Tq)) { cur = cc; if (cc < lc) { lc = cc; lb = save(); } }
+        else { q.x = qx; q.y = qy; q.rot = qr; }
+      }
+      return { s: lb, c: lc };
+    }
+    var start = save(), best = null, bestC = 1e18, R = heavy ? 14 : 4;
+    if (valid()) { best = start; bestC = total(); }
+    for (var r = 0; r < R; r++) {
+      if (r > 0) {
+        on.forEach(function (p) {
+          p.rot = Math.floor(Math.random() * 4); var d = dims(p);
+          p.x = snap(Math.random() * Math.max(0, B.w - d.w)); p.y = snap(Math.random() * Math.max(0, B.h - d.h));
+        });
+      }
+      if (!feasible()) continue;
+      var res = anneal(15000, r === 0 && best ? 30 : 80);
+      if (res.c < bestC) { bestC = res.c; best = res.s; }
+    }
+    if (!best) { load(start); draw(); statusEl.insertAdjacentHTML('beforeend', '<div class="cover">Could not find a layout that fits everything. Pick a bigger board or turn off a part.</div>'); return; }
+    load(best); draw();
+  }
+
+  function check() {
+    var on = parts.filter(function (p) { return p.on; });
+    var bad = {}, ov = [], off = [], edge = [];
+    for (var i = 0; i < on.length; i++) for (var j = i + 1; j < on.length; j++) {
+      if (overlap(rect(on[i]), rect(on[j]))) { ov.push([on[i], on[j]]); bad[on[i].id] = 1; bad[on[j].id] = 1; }
+    }
+    on.forEach(function (p) {
+      var r = rect(p);
+      if (r.x < -0.01 || r.y < -0.01 || r.x + r.w > B.w + 0.01 || r.y + r.h > B.h + 0.01) { off.push(p); bad[p.id] = 1; }
+    });
+    on.forEach(function (p) {
+      if (!p.edge || bad[p.id]) return;
+      var r = rect(p), d;
+      if (p.id === 'pico') {
+        var ux = [r.x, r.x + r.w / 2, r.x + r.w, r.x + r.w / 2][p.rot];
+        var uy = [r.y + r.h / 2, r.y, r.y + r.h / 2, r.y + r.h][p.rot];
+        d = Math.min(ux, uy, B.w - ux, B.h - uy);
+      } else d = Math.min(r.x, r.y, B.w - r.x - r.w, B.h - r.y - r.h);
+      if (d > EDGE) edge.push(p);
+    });
+    var area = on.reduce(function (s, p) { return s + p.w * p.h; }, 0);
+    return { bad: bad, ov: ov, off: off, edge: edge, pct: Math.round(area / (B.w * B.h) * 100) };
+  }
+
+  function partSVG(p, bad) {
+    var d = dims(p), isSel = sel === p.id;
+    var stroke = bad ? 'var(--bad)' : isSel ? '#ffffff' : 'rgba(255,255,255,0.45)';
+    var s = '<g class="part" data-id="' + p.id + '" transform="translate(' + p.x + ' ' + p.y + ')">';
+    s += '<rect width="' + d.w + '" height="' + d.h + '" rx="0.8" style="fill:var(' + p.color + ')" fill-opacity="0.9" stroke="' + stroke + '" stroke-width="' + (bad || isSel ? 0.7 : 0.35) + '"' + (bad ? ' stroke-dasharray="1.6 0.8"' : '') + '/>';
+    if (p.id === 'pico') {
+      var horiz = p.rot % 2 === 0, short = horiz ? d.h : d.w, inset = (short - 17.78) / 2;
+      if (horiz) {
+        s += '<rect x="' + (p.rot === 0 ? 0 : d.w - 4) + '" y="' + (d.h - 8) / 2 + '" width="4" height="8" fill="rgba(255,255,255,0.55)"/>';
+        for (var i = 0; i < 20; i++) {
+          var px = d.w / 2 + (i - 9.5) * G;
+          s += '<circle cx="' + px + '" cy="' + inset + '" r="0.45" fill="rgba(255,255,255,0.75)"/><circle cx="' + px + '" cy="' + (d.h - inset) + '" r="0.45" fill="rgba(255,255,255,0.75)"/>';
+        }
+      } else {
+        s += '<rect x="' + (d.w - 8) / 2 + '" y="' + (p.rot === 1 ? 0 : d.h - 4) + '" width="8" height="4" fill="rgba(255,255,255,0.55)"/>';
+        for (var k = 0; k < 20; k++) {
+          var py = d.h / 2 + (k - 9.5) * G;
+          s += '<circle cx="' + inset + '" cy="' + py + '" r="0.45" fill="rgba(255,255,255,0.75)"/><circle cx="' + (d.w - inset) + '" cy="' + py + '" r="0.45" fill="rgba(255,255,255,0.75)"/>';
+        }
+      }
+    }
+    if (p.id === 'ps2' && p.variant === 'jack') {
+      s += '<circle cx="' + d.w / 2 + '" cy="' + d.h / 2 + '" r="' + Math.min(d.w, d.h) * 0.3 + '" fill="rgba(0,0,0,0.35)" stroke="rgba(255,255,255,0.6)" stroke-width="0.4"/>';
+    }
+    s += '<text x="' + d.w / 2 + '" y="' + d.h / 2 + '" text-anchor="middle" dominant-baseline="central" font-size="2.4" font-weight="600" fill="#fff" stroke="rgba(0,0,0,0.55)" stroke-width="0.5" paint-order="stroke" style="font-family:var(--sans);pointer-events:none">' + esc(p.short) + '</text>';
+    return s + '</g>';
+  }
+
+  function draw() {
+    var c = check();
+    svg.setAttribute('viewBox', '-2 -2 ' + (B.w + 4) + ' ' + (B.h + 9));
+    var h = '<defs><pattern id="holes" width="' + G + '" height="' + G + '" patternUnits="userSpaceOnUse"><circle cx="' + O + '" cy="' + O + '" r="0.45" style="fill:var(--hole)"/></pattern></defs>';
+    h += '<rect width="' + B.w + '" height="' + B.h + '" rx="2" style="fill:var(--board);stroke:var(--board-edge)" stroke-width="0.6"/>';
+    h += '<rect width="' + B.w + '" height="' + B.h + '" rx="2" fill="url(#holes)"/>';
+    parts.filter(function (p) { return p.on; }).sort(function (a, b) { return a.z - b.z; }).forEach(function (p) { h += partSVG(p, c.bad[p.id]); });
+    NM = netMetrics();
+    h += '<g id="nets" style="pointer-events:none">' + netsSVG(NM) + '</g>';
+    var sp = sel && byId(sel);
+    if (sp && sp.on) {
+      var sd = dims(sp), hx = Math.min(sp.x + sd.w + 1.5, B.w + 1), hy = Math.max(sp.y - 1.5, -0.5);
+      h += '<g class="rot-handle" transform="translate(' + hx + ' ' + hy + ')"><circle r="3.4" fill="#ffffff" stroke="#14201C" stroke-width="0.5"/><path d="M-1.4 -1.2A1.9 1.9 0 1 1 -1.4 1.2" fill="none" stroke="#14201C" stroke-width="0.6"/><polygon points="-2.9,-1.9 -0.4,-2.1 -1.9,0.2" fill="#14201C"/></g>';
+    }
+    var y = B.h + 3.5;
+    h += '<path d="M0 ' + y + 'H10M0 ' + (y - 1) + 'v2M10 ' + (y - 1) + 'v2" fill="none" style="stroke:var(--fg)" stroke-width="0.4"/>';
+    h += '<text x="12" y="' + (y + 0.9) + '" font-size="2.4" style="fill:var(--muted);font-family:var(--mono)">10 mm</text>';
+    layer.innerHTML = h;
+    bdims.textContent = mm(B.w) + ' × ' + mm(B.h) + ' mm  (' + (B.w / 25.4).toFixed(1) + ' × ' + (B.h / 25.4).toFixed(1) + ' in)';
+    drawStatus(c);
+    drawRouting(NM);
+    var p = sel && byId(sel);
+    rotBtn.disabled = !(p && p.on);
+    rotBtn.textContent = p && p.on ? 'Rotate ' + p.short : 'Rotate';
+    Array.prototype.forEach.call(listEl.children, function (r) { r.classList.toggle('sel', r.dataset.id === sel); });
+  }
+
+  function drawStatus(c) {
+    var ok = !c.ov.length && !c.off.length, cls, txt;
+    if (ok && !c.edge.length) { cls = 'ok'; txt = 'Fits. No overlaps and everything is on the board.'; }
+    else if (ok) { cls = 'warn'; txt = 'Fits, but check cable access.'; }
+    else { cls = 'bad'; txt = 'Does not fit yet: ' + c.ov.length + ' overlap' + (c.ov.length === 1 ? '' : 's') + ', ' + c.off.length + ' off the board.'; }
+    var li = [];
+    c.ov.forEach(function (o) { li.push(esc(o[0].name) + ' overlaps ' + esc(o[1].name) + '.'); });
+    c.off.forEach(function (p) { li.push(esc(p.name) + ' hangs off the board.'); });
+    c.edge.forEach(function (p) { li.push(esc(p.name) + (p.id === 'pico' ? ' has its USB end' : ' is') + ' more than ' + EDGE + ' mm from an edge, so a plug may not reach it.'); });
+    statusEl.innerHTML = '<div class="pill ' + cls + '">' + txt + '</div>' + (li.length ? '<ul>' + li.map(function (t) { return '<li>' + t + '</li>'; }).join('') + '</ul>' : '') +
+      '<div class="cover">Parts cover about ' + c.pct + '% of the board.</div>';
+  }
+
+  function buildList() {
+    listEl.innerHTML = parts.map(function (p) {
+      var v = p.id === 'ps2' ? '<select data-act="variant" aria-label="PS/2 style"><option value="jack"' + (p.variant === 'jack' ? ' selected' : '') + '>Jack on board</option><option value="screw"' + (p.variant === 'screw' ? ' selected' : '') + '>Screw-terminal breakout</option></select>' : '';
+      return '<div class="row" data-id="' + p.id + '">' +
+        '<div class="nmwrap"><input type="checkbox" data-act="on" aria-label="Include ' + esc(p.name) + '"' + (p.on ? ' checked' : '') + (p.fixed ? ' disabled' : '') + '>' +
+        '<span class="sw" style="background:var(' + p.color + ')"></span><span class="nm" data-act="pick">' + esc(p.id === 'ps2' ? 'PS/2 connector' : p.name) + '</span></div>' + v +
+        '<div class="size"><input type="number" step="0.1" min="2" data-act="w" aria-label="Width mm" value="' + p.w + '"' + (p.fixed ? ' disabled' : '') + '> × <input type="number" step="0.1" min="2" data-act="h" aria-label="Height mm" value="' + p.h + '"' + (p.fixed ? ' disabled' : '') + '> mm</div>' +
+        '<span class="src">' + p.src + '</span><div class="dom">' + esc(p.dom) + '</div></div>';
+    }).join('');
+  }
+
+  function toMM(e) {
+    var pt = svg.createSVGPoint(); pt.x = e.clientX; pt.y = e.clientY;
+    return pt.matrixTransform(svg.getScreenCTM().inverse());
+  }
+
+  function applyBad(c) {
+    Array.prototype.forEach.call(layer.querySelectorAll('.part'), function (g) {
+      var r = g.firstChild, b = c.bad[g.dataset.id], isSel = sel === g.dataset.id;
+      r.setAttribute('stroke', b ? 'var(--bad)' : isSel ? '#ffffff' : 'rgba(255,255,255,0.45)');
+      r.setAttribute('stroke-width', b || isSel ? 0.7 : 0.35);
+      if (b) r.setAttribute('stroke-dasharray', '1.6 0.8'); else r.removeAttribute('stroke-dasharray');
+    });
+  }
+  var raf = 0;
+  function live() {
+    if (raf) return;
+    raf = requestAnimationFrame(function () {
+      raf = 0;
+      if (!drag) return;
+      drag.el.setAttribute('transform', 'translate(' + drag.p.x + ' ' + drag.p.y + ')');
+      var c = check(); applyBad(c); drawStatus(c);
+      NM = netMetrics(); document.getElementById('nets').innerHTML = netsSVG(NM); drawRouting(NM);
+    });
+  }
+  svg.addEventListener('pointerdown', function (e) {
+    var hnd = e.target.closest ? e.target.closest('.rot-handle') : null;
+    if (hnd) { e.preventDefault(); if (sel) rotate(sel); return; }
+    var g = e.target.closest ? e.target.closest('.part') : null;
+    if (!g) { sel = null; draw(); return; }
+    var p = byId(g.dataset.id), pt = toMM(e);
+    sel = p.id; p.z = ++zc;
+    svg.setPointerCapture(e.pointerId); e.preventDefault();
+    draw();
+    drag = { p: p, dx: pt.x - p.x, dy: pt.y - p.y, el: layer.querySelector('[data-id="' + p.id + '"]') };
+    var hh = layer.querySelector('.rot-handle'); if (hh) hh.style.display = 'none';
+  });
+  svg.addEventListener('pointermove', function (e) {
+    if (!drag) return;
+    var pt = toMM(e), d = dims(drag.p);
+    drag.p.x = Math.max(-30, Math.min(B.w + 30 - d.w, pt.x - drag.dx));
+    drag.p.y = Math.max(-30, Math.min(B.h + 30 - d.h, pt.y - drag.dy));
+    live();
+  });
+  function endDrag() {
+    if (!drag) return;
+    drag.p.x = snap(drag.p.x); drag.p.y = snap(drag.p.y);
+    drag = null;
+    if (raf) { cancelAnimationFrame(raf); raf = 0; }
+    draw();
+  }
+  svg.addEventListener('pointerup', endDrag);
+  svg.addEventListener('pointercancel', endDrag);
+  svg.addEventListener('dblclick', function (e) { var g = e.target.closest('.part'); if (g) rotate(g.dataset.id); });
+
+  function rotate(id) {
+    var p = byId(id); if (!p || !p.on) return;
+    var c = { x: p.x + dims(p).w / 2, y: p.y + dims(p).h / 2 };
+    p.rot = (p.rot + 1) % 4;
+    var d = dims(p); p.x = snap(c.x - d.w / 2); p.y = snap(c.y - d.h / 2);
+    draw();
+  }
+  rotBtn.addEventListener('click', function () { if (sel) rotate(sel); });
+  document.addEventListener('keydown', function (e) {
+    if ((e.key === 'r' || e.key === 'R') && sel && !/INPUT|SELECT|TEXTAREA/.test(document.activeElement.tagName)) rotate(sel);
+  });
+  document.getElementById('pack').addEventListener('click', function () { autopack(); draw(); });
+  document.getElementById('opt').addEventListener('click', function () { optimize(true); });
+  document.getElementById('showNets').addEventListener('change', function (e) { showNets = e.target.checked; draw(); });
+
+  function setBoard(w, h) { B.w = w; B.h = h; bw.value = mm(w); bh.value = mm(h); }
+  boardSel.addEventListener('change', function () {
+    var b = BOARDS[boardSel.value];
+    if (b) { setBoard(b.w, b.h); if (valid()) draw(); else optimize(); }
+  });
+  function customBoard() {
+    var w = parseFloat(bw.value), h = parseFloat(bh.value);
+    if (!(w >= 20 && h >= 20)) return;
+    B.w = w; B.h = h; boardSel.value = 'custom';
+    var match = Object.keys(BOARDS).filter(function (k) { return BOARDS[k] && Math.abs(BOARDS[k].w - w) < 0.05 && Math.abs(BOARDS[k].h - h) < 0.05; })[0];
+    if (match) boardSel.value = match;
+    draw();
+  }
+  bw.addEventListener('input', customBoard);
+  bh.addEventListener('input', customBoard);
+
+  listEl.addEventListener('input', function (e) {
+    var act = e.target.dataset.act, row = e.target.closest('.row');
+    if (!row || (act !== 'w' && act !== 'h')) return;
+    var v = parseFloat(e.target.value);
+    if (!(v >= 2)) return;
+    var p = byId(row.dataset.id); p[act] = v; draw();
+  });
+  listEl.addEventListener('change', function (e) {
+    var act = e.target.dataset.act, row = e.target.closest('.row');
+    if (!row) return;
+    var p = byId(row.dataset.id);
+    if (act === 'on') { p.on = e.target.checked; if (p.on) findSpot(p); if (sel === p.id && !p.on) sel = null; draw(); }
+    if (act === 'variant') { var v = PS2[e.target.value]; p.variant = e.target.value; p.w = v.w; p.h = v.h; p.name = v.name; buildList(); draw(); }
+  });
+  listEl.addEventListener('click', function (e) {
+    if (e.target.dataset.act !== 'pick') return;
+    var p = byId(e.target.closest('.row').dataset.id);
+    if (p.on) { sel = p.id; p.z = ++zc; draw(); }
+  });
+
+  setBoard(B.w, B.h);
+  autopack();
+  buildList();
+  if (valid()) draw(); else optimize();
+})();
+</script>
+</body>
+</html>
