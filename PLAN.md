@@ -41,7 +41,17 @@ pin constraints and the power split), then **a 3D-printed enclosure** for it. Th
 blog-style story with photos; the build guide lives in the README ("Build one yourself": six steps, SD card, first
 boot, troubleshooting).
 
-#### Idea: carrier board (not started, 2026-10-28)
+#### Carrier board — ACTIVE as of 2026-10-28, see `hardware/carrier/`
+
+**This stopped being an idea on 2026-10-28.** The owner resumed it and set two routes: a
+**protoboard build (preferred)**, with KiCad used as the layout planning tool for it, and a
+**JLC 2-layer order** as the full-commitment alternative. A one-sided *ordered* board was ruled
+out — it gives up the ground plane, which is the whole electrical reason to leave the breadboard,
+and costs the same as 2-layer. The project now lives at `hardware/carrier/` (scaffolded with the
+`pcb-design` skill); **`hardware/carrier/STATE.md` is authoritative from here**, and the scope and
+PCB-vs-protoboard reasoning is on the review page linked there. What follows is the background it
+started from.
+
 
 Moving the breadboard circuit onto one soldered board — protoboard or a single-layer custom PCB.
 Explored far enough to record the constraints, then parked; a browser fit/layout tool written for

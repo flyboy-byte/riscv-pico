@@ -1,0 +1,33 @@
+signal,mcu_pin,fw_pin,net,terminal,label,direction,level,notes
+# Source of truth is upstream/pico-rv32ima/pico-rv32ima/hw_config.h. These assignments are
+# COMPILED INTO FIRMWARE: changing one means a firmware rebuild and a reflash. The layout routes
+# around them, never the reverse. mcu_pin = Pico physical pin, fw_pin = RP2040 GPIO number.
+SD_CS,1,GP0,SD_CS,J_SD-1,CS,out,3V3,spi0. hw_config.h SD_SPI_PIN_CS
+SD_SCK,4,GP2,SD_SCK,J_SD-2,SCK,out,3V3,spi0. hw_config.h SD_SPI_PIN_CK
+SD_MOSI,5,GP3,SD_MOSI,J_SD-3,MOSI,out,3V3,spi0. hw_config.h SD_SPI_PIN_TX
+SD_MISO,6,GP4,SD_MISO,J_SD-4,MISO,in,3V3,spi0. hw_config.h SD_SPI_PIN_RX
+PSRAM_SCK,14,GP10,PSRAM_SCK,J_RAM-1,SCK,out,3V3,spi1 at 20 MHz. CRITICAL GROUP - keep shortest
+PSRAM_MOSI,15,GP11,PSRAM_MOSI,J_RAM-2,MOSI,out,3V3,spi1. CRITICAL GROUP
+PSRAM_MISO,16,GP12,PSRAM_MISO,J_RAM-3,MISO,in,3V3,spi1. CRITICAL GROUP
+PSRAM_CS1,17,GP13,PSRAM_CS1,J_RAM-4,CS1,out,3V3,chip 1 select. CRITICAL GROUP
+PSRAM_CS2,19,GP14,PSRAM_CS2,J_RAM-5,CS2,out,3V3,chip 2 select. CRITICAL GROUP
+VGA_VSYNC,21,GP16,VGA_VSYNC,J_VGA-1,VSYNC,out,3V3,via 68R on the breakout - do not move the resistor
+VGA_HSYNC,22,GP17,VGA_HSYNC,J_VGA-2,HSYNC,out,3V3,via 68R on the breakout
+VGA_R,24,GP18,VGA_R,J_VGA-3,R,out,3V3,via 270R on the breakout. PIO pixel clock - fast switcher
+VGA_G,25,GP19,VGA_G,J_VGA-4,G,out,3V3,via 270R. Implied by the PIO program as VGA_R_PIN+1
+VGA_B,26,GP20,VGA_B,J_VGA-5,B,out,3V3,via 270R. Implied by the PIO program as VGA_R_PIN+2
+OLED_SCL,27,GP21,OLED_SCL,J_OLED-1,SCL,out,3V3,i2c0 at 400 kHz. Not adjacent to SDA - two jumpers
+OLED_SDA,34,GP28,OLED_SDA,J_OLED-2,SDA,bidir,3V3,i2c0. Only free i2c-capable pair after everything else
+PS2_DATA,31,GP26,PS2_DATA_LV,J_LVL-1,DATA LV,bidir,3V3,low side of the BSS138. High side goes to the keyboard
+PS2_CK,32,GP27,PS2_CK_LV,J_LVL-2,CLK LV,bidir,3V3,low side of the BSS138
+3V3_OUT,36,-,+3V3_PICO,-,3V3,power,3V3,Pico regulator output. Feeds PSRAM VCC and the WP/HOLD pull-ups ONLY
+VSYS,39,-,+5V_EXT,TB1-1,5V,power,5V,External supply input. Same rail also feeds the keyboard
+GND_PSRAM,18,-,GND,-,GND,power,-,Nearest GND to the PSRAM pins - use this return for the critical group
+GND_VGA,23,-,GND,-,GND,power,-,Nearest GND to the VGA pins - dedicated return for the fast group
+GND_OLED,28,-,GND,-,GND,power,-,Nearest GND to GP21/GP28
+GND_TIE,38,-,GND,TB1-2,GND,power,-,Single-point ground tie to the external supply
+# --- RESERVED, DO NOT REUSE ---
+# GP5-GP8 (pins 7,9,10,11) are a bit-banged SPI exposed to the RISC-V guest via custom CSRs
+# 0x180-0x183. An earlier pin audit called them free and was wrong. Leave them unconnected.
+# GP1 (pin 2), GP9 (pin 12), GP15 (pin 20), GP22 (pin 29) are genuinely free. GP1 is also the
+# guest-visible GPIO line 0 in the Linux gpiochip, so it is in use from the guest's point of view.

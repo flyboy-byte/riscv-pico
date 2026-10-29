@@ -129,6 +129,15 @@ device, `0x170` for hibernate) that stock mini-rv32ima doesn't implement, so the
 with no root device and dies silently before the console is usable. `harness/` sidesteps that by
 building the actual `tiny-rv32ima` core instead of stubbing around it.
 
+## The carrier board
+
+`hardware/carrier/` is a board project for moving the circuit off the breadboard, scaffolded with
+the `pcb-design` skill and **active since 2026-10-28**. Read `hardware/carrier/STATE.md` first and
+load the `pcb-design` skill before touching anything in there. Two routes only: a protoboard build
+(preferred) or a JLC 2-layer order (full commitment). Pin assignments live in
+`hardware/carrier/pinmap.csv`, generated from `hw_config.h` — they are compiled into firmware, so
+the layout routes around them.
+
 ## Scope fence
 
 This is a hardware bring-up and porting workbench. Don't turn it into a framework, a build system,
