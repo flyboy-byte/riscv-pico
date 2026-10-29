@@ -121,12 +121,12 @@ and re-run to see the cost. Recorded in `MEASURE.md` too.
 | Check | Result | Summary | Date | Files (sha256/12) |
 | --- | --- | --- | --- | --- |
 | Pin map matches firmware hw_config.h | PASS | PASS firmware pinmap: 18 signals match hw_config.h | 2026-10-28 | `pinmap.csv` 4ae5c3210bba |
-| Pads on the protoboard grid | PASS | PASS grid: all 108 pads on the 2.54 mm grid | 2026-10-28 | `carrier_proto.kicad_pcb` cea9e97da69e |
+| Pads on the protoboard grid | PASS | PASS grid: all 108 pads on the 2.54 mm grid | 2026-10-28 | `carrier_proto.kicad_pcb` 41280eb1efca |
 | Module bodies do not collide | PASS | PASS bodies: 5 on-board bodies (J_LVL_LV, PICO, TB1, U_RAM1, U_RAM2), none overlapping, all on the board | 2026-10-28 | `bodies.json` f88fb4b391ff, `modules.csv` 51aa061fb3c0 |
-| DRC (unconnected = the wire list) | FAIL (advisory) | DRC 61 errors: unconnected_items 61 (report checks/out/carrier_proto-drc.json) | 2026-10-28 | `carrier_proto.kicad_pcb` cea9e97da69e |
+| DRC (unconnected = the wire list) | FAIL (advisory) | DRC 61 errors: unconnected_items 61 (report checks/out/carrier_proto-drc.json) | 2026-10-28 | `carrier_proto.kicad_pcb` 41280eb1efca |
 | No hand edits waiting | PASS | no drift | 2026-10-28 |  |
 
-Written by `checks/run_all.py` at commit cfa8cc3. Don't edit by hand.
+Written by `checks/run_all.py` at commit 1647a64. Don't edit by hand.
 <!-- checks:end -->
 
 ## Bring-up results
