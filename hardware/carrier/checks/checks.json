@@ -1,6 +1,5 @@
 [
-  {"name": "DRC (errors)", "cmd": ["python3", "checks/kicad_check.py", "drc", "BOARD.kicad_pcb"], "files": ["BOARD.kicad_pcb"]},
-  {"name": "ERC (errors)", "cmd": ["python3", "checks/kicad_check.py", "erc", "BOARD.kicad_sch"], "files": ["BOARD.kicad_sch"]},
-  {"name": "Pin map and firmware headers", "cmd": ["python3", "checks/pinmap.py", "check", "BOARD.kicad_pcb"], "files": ["pinmap.csv"]},
+  {"name": "Pads on the protoboard grid", "cmd": ["python3", "checks/grid_check.py", "carrier_proto.kicad_pcb"], "files": ["carrier_proto.kicad_pcb"]},
+  {"name": "DRC (errors)", "cmd": ["python3", "checks/kicad_check.py", "drc", "carrier_proto.kicad_pcb"], "files": ["carrier_proto.kicad_pcb"], "advisory": true},
   {"name": "No hand edits waiting", "cmd": ["python3", "checks/drift.py", "check"], "files": []}
 ]

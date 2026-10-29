@@ -31,3 +31,7 @@ harness/.recent_disk_images.json
 upstream/pico-linux/linux/buildroot
 upstream/pico-linux/linux/c4/c4src
 upstream/pico-linux/linux/output
+
+# KiCad generated/working files in the carrier board project
+hardware/carrier/checks/out/
+hardware/carrier/*-backups/

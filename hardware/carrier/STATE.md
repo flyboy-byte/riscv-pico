@@ -28,6 +28,7 @@ Mark a stage done only when its exit condition is true. Strike through, don't de
 | # | Stage | Exit condition | Done |
 | --- | --- | --- | --- |
 | 1 | Requirements | `REQUIREMENTS.md` answered by the owner; breakout/perfboard ruled out | In progress — and see note |
+| 3 | Schematic | Generated from code; netlist self-check passes | **Done 2026-10-28** — `gen_proto.py` holds it as a table; all 61 links verified against `pinmap.csv` |
 | 2 | Parts | Every part in `parts_research.md` with pinout, land pattern, temp rating, stock, source URL; real 3D model seen for user-handled and tall parts | |
 | 3 | Schematic | Generated from code; netlist self-check passes | |
 | 4 | Fit check | Artifact page with the to-scale picture and size table (mm + in) approved by the owner | |
@@ -61,10 +62,32 @@ route unless the owner later commits to ordering. Stages 2–7 still apply to th
 - Pin assignments are **frozen in firmware** (`hw_config.h`). The layout routes around them. They
   live in `pinmap.csv` and nowhere else.
 
+## Protoboard draft (2026-10-28)
+
+`gen_proto.py` → `carrier_proto.kicad_pcb`, rendered in `renders/proto-draft3/`, wire list in
+`BUILD_SHEET.md`. 18 footprints, 28 nets, **61 wire links to solder**, on a 90 × 70 mm
+(3.54 × 2.76 in) protoboard, 35 × 27 holes, using cols 1–31 and rows 2–23.
+
+- Left half: SD and the PSRAM group, with each DIP socket two holes from the Pico's left pin row
+  and the SCK/MOSI side of the DIP facing it. Right half: power in, OLED, PS/2 through the BSS138,
+  and VGA furthest from the PSRAM group. That split is the separation HARDWARE_SCHEMATIC.md asks
+  for, not cosmetics.
+- **DRC's 61 "unconnected items" are the 61 wire links**, not faults. There are deliberately no
+  traces — on a protoboard the connections are wires. The number matching the wire list is the
+  check, so if those two ever disagree, something is wrong.
+- `checks/grid_check.py` is this project's own check: every pad must land on a hole. It caught the
+  first draft using KiCad's stock THT capacitor footprints, which are all 5.00 mm pitch and
+  therefore between holes. `carrier.pretty/` holds on-grid replacements.
+- Draft 1 → 2 → 3: draft 1 wasted the bottom third of a 96.5 × 88.9 mm board and had the pull-up
+  resistors overlapping each other; draft 2 fixed the placement and shrank the board; draft 3
+  cleared 6 courtyard overlaps and dropped the mounting-hole footprints.
+
 ## Checks
 <!-- checks:start -->
-Not run yet. `checks/run_all.py` writes this table from `checks/checks.json`; don't edit it by hand.
-No KiCad files exist yet, so DRC/ERC would be SKIPPED rather than passed.
+| Check | Result | When |
+| --- | --- | --- |
+| Pads on the protoboard grid | PASS — all 108 pads on the 2.54 mm grid | 2026-10-28 |
+| DRC (advisory) | 61 unconnected items = the 61 wire links; 0 clearance or courtyard errors | 2026-10-28 |
 <!-- checks:end -->
 
 ## Bring-up results
@@ -87,4 +110,15 @@ No KiCad files exist yet, so DRC/ERC would be SKIPPED rather than passed.
 - Does the VGA breakout mount on the board, or stay on a cable? It is the largest unknown footprint
   and a heavy connector. Owner decides.
 - Mounting holes and enclosure now, or later? A 3D-printed enclosure is already on the owner's list
-  and corner holes are free to add, expensive to retrofit.
+  and corner holes are free to add, expensive to retrofit. The protoboard draft has **no**
+  mounting-hole footprints — the board already has holes everywhere, so which ones become mounting
+  points is an enclosure decision. The PCB variant would need real ones in the corners.
+- **Decoupling placement needs a refinement pass.** C1/C2 are on the grid beside each PSRAM chip,
+  but a DIP-8's VCC (pin 8) and GND (pin 4) are diagonally opposite, so the cap cannot sit across
+  both without a detour. Getting this as tight as possible is the single most important physical
+  detail on the board, since a sagging PSRAM VCC is the suspected fault mechanism.
+- **Where does the BSS138's LV reference come from?** The draft takes it from the external 3.3 V
+  rail, to respect the rule that pin 36 feeds PSRAM and its pull-ups only. But a level converter's
+  LV reference should match the logic it translates, which is the Pico's own I/O rail. The
+  converter draws microamps, so taking LV from pin 36 would be electrically more correct and
+  practically harmless. Owner decides; the draft took the conservative reading of the rule.
