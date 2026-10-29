@@ -37,8 +37,8 @@ resized to 1600 px and stripped of metadata. The phone originals sit untracked i
 **Project on hold as of 2026-09-16.** The user considers it done until they resume, and asked for
 no growth in the meantime. Future directions they named, not started: **a perfboard build** of
 the same circuit (the plan for it is "Idea: carrier board" just below — start there, it holds the
-pin constraints and the power split), then **a 3D-printed enclosure** for it. The website became a blog-style story
-with photos; the build guide lives in the README ("Build one yourself": six steps, SD card, first
+pin constraints and the power split), then **a 3D-printed enclosure** for it. The website became a
+blog-style story with photos; the build guide lives in the README ("Build one yourself": six steps, SD card, first
 boot, troubleshooting).
 
 #### Idea: carrier board (not started, 2026-10-28)
