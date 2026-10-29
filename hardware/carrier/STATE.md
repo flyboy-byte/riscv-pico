@@ -1,6 +1,7 @@
 # STATE — Pico carrier board
 
-Status: **Stage 1, requirements — in progress (2026-10-28)**
+Status: **Stage 4, fit check — blocked on measurement (2026-10-28)**
+**Next action: [MEASURE.md](MEASURE.md).** Six modules are still guessed; that is the only thing between here and a buildable protoboard.
 Revision in progress: none yet.   Revisions used (never reused): none.
 Review pages: scope and PCB-vs-protoboard call <https://claude.ai/artifact/X4U9icB6S6mdqby3T4im1R>
 
@@ -64,30 +65,68 @@ route unless the owner later commits to ordering. Stages 2–7 still apply to th
 
 ## Protoboard draft (2026-10-28)
 
-`gen_proto.py` → `carrier_proto.kicad_pcb`, rendered in `renders/proto-draft3/`, wire list in
+`gen_proto.py` → `carrier_proto.kicad_pcb`, rendered in `renders/proto-draft6/`, wire list in
 `BUILD_SHEET.md`. 18 footprints, 28 nets, **61 wire links to solder**, on a 90 × 70 mm
 (3.54 × 2.76 in) protoboard, 35 × 27 holes, using cols 1–31 and rows 2–23.
 
-- Left half: SD and the PSRAM group, with each DIP socket two holes from the Pico's left pin row
-  and the SCK/MOSI side of the DIP facing it. Right half: power in, OLED, PS/2 through the BSS138,
-  and VGA furthest from the PSRAM group. That split is the separation HARDWARE_SCHEMATIC.md asks
-  for, not cosmetics.
+**Everything measurable lives in two CSVs.** `pinmap.csv` is the electrical truth, generated from
+`hw_config.h` and guarded by a check. `modules.csv` holds every physical guess — pin counts, pin
+order, body outlines, confidence. Measuring a module means editing one row and re-running; nothing
+else is touched. `gen_proto.py` refuses to run if a `pin_order` names a function it has no net for,
+or if a pin count disagrees with the chosen footprint.
+
+- Left half: SD and the PSRAM group, each DIP socket two holes from the Pico's left pin row with
+  the SCK/MOSI side of the DIP facing it. Right half: power in, OLED, PS/2 through the BSS138, VGA
+  furthest from the PSRAM group. That split is the separation HARDWARE_SCHEMATIC.md asks for.
 - **DRC's 61 "unconnected items" are the 61 wire links**, not faults. There are deliberately no
-  traces — on a protoboard the connections are wires. The number matching the wire list is the
-  check, so if those two ever disagree, something is wrong.
-- `checks/grid_check.py` is this project's own check: every pad must land on a hole. It caught the
-  first draft using KiCad's stock THT capacitor footprints, which are all 5.00 mm pitch and
-  therefore between holes. `carrier.pretty/` holds on-grid replacements.
-- Draft 1 → 2 → 3: draft 1 wasted the bottom third of a 96.5 × 88.9 mm board and had the pull-up
-  resistors overlapping each other; draft 2 fixed the placement and shrank the board; draft 3
-  cleared 6 courtyard overlaps and dropped the mounting-hole footprints.
+  traces — on a protoboard the connections are wires. The two numbers matching is the check; if
+  they ever disagree, something is wrong. This is why DRC is marked advisory in `checks.json`.
+- The Pico is **two 1×20 sockets 0.7 in apart**, not one 2×20. That is how it is actually built on
+  protoboard, and it makes the pin numbering unambiguous instead of depending on KiCad's 2×20 pad
+  order. Right socket pad *n* is Pico pin 41−*n*, because pins 21–40 run back up the right side.
+
+### What the checks caught
+
+Four checks, three of them written for this project. Each was negative-tested by deliberately
+breaking the design and confirming it failed.
+
+| Check | What it caught |
+| --- | --- |
+| `grid_check.py` | Draft 1 used KiCad's stock THT capacitor footprints. **Every one of them is 5.00 mm pitch**, so the decoupling caps landed between protoboard holes. There are no on-grid THT capacitor footprints in KiCad at all, so `carrier.pretty/` now holds two. |
+| `body_check.py` | Pads fitting does not mean modules fit. With all modules on-board the bodies collided in **7 places** — the SD breakout alone overlapped the Pico by 18 × 23 mm, and PS/2 and VGA hung off the board edge. Led to the off-board decision below. |
+| `fw_pinmap_check.py` | Nothing yet, but it is the one that matters most long-term: it reads `hw_config.h` directly and fails if any of the 18 signals drifts from `pinmap.csv`. Without it, a firmware pin change would leave the layout, the wire list and the build sheet all self-consistent and all wrong. |
+| KiCad DRC | 6 courtyard overlaps and a mounting hole inside `J_SD`'s courtyard, in draft 2. |
+
+### Draft history
+
+| Draft | What changed |
+| --- | --- |
+| 1 | First placement on a 96.5 × 88.9 mm board. Wasted the bottom third; the four PSRAM pull-ups physically overlapped each other; capacitors off-grid. |
+| 2 | Re-placed, shrank the board to 90 × 70 mm. |
+| 3 | Cleared 6 courtyard overlaps; dropped the mounting-hole footprints (a protoboard already has holes everywhere, so which become mounting points is an enclosure decision). |
+| 4 | Moved every physical guess into `modules.csv`; drew module **bodies** on F.Fab for the first time, which exposed the 7 collisions. |
+| 5 | SD, VGA, PS/2 and OLED bodies moved off-board; added the Pico's own 21 × 51 mm outline. |
+| 6 | Hid part-name text that collided on the silkscreen at this density. Current. |
+
+### Decision I made for you, which you can reverse
+
+**SD, VGA, PS/2 and the OLED are `body_on_board = no`** — only their headers are on the carrier, and
+the modules mount to the enclosure wall on short cables. Reasoning: all four are things a user
+touches or looks at (a card slot, two panel connectors, a display), so a wall is where they belong
+anyway, and with them on-board the bodies simply do not fit. Flip any row in `modules.csv` to `yes`
+and re-run to see the cost. Recorded in `MEASURE.md` too.
 
 ## Checks
 <!-- checks:start -->
-| Check | Result | When |
-| --- | --- | --- |
-| Pads on the protoboard grid | PASS — all 108 pads on the 2.54 mm grid | 2026-10-28 |
-| DRC (advisory) | 61 unconnected items = the 61 wire links; 0 clearance or courtyard errors | 2026-10-28 |
+| Check | Result | Summary | Date | Files (sha256/12) |
+| --- | --- | --- | --- | --- |
+| Pin map matches firmware hw_config.h | PASS | PASS firmware pinmap: 18 signals match hw_config.h | 2026-10-28 | `pinmap.csv` 4ae5c3210bba |
+| Pads on the protoboard grid | PASS | PASS grid: all 108 pads on the 2.54 mm grid | 2026-10-28 | `carrier_proto.kicad_pcb` cea9e97da69e |
+| Module bodies do not collide | PASS | PASS bodies: 5 on-board bodies (J_LVL_LV, PICO, TB1, U_RAM1, U_RAM2), none overlapping, all on the board | 2026-10-28 | `bodies.json` f88fb4b391ff, `modules.csv` 51aa061fb3c0 |
+| DRC (unconnected = the wire list) | FAIL (advisory) | DRC 61 errors: unconnected_items 61 (report checks/out/carrier_proto-drc.json) | 2026-10-28 | `carrier_proto.kicad_pcb` cea9e97da69e |
+| No hand edits waiting | PASS | no drift | 2026-10-28 |  |
+
+Written by `checks/run_all.py` at commit cfa8cc3. Don't edit by hand.
 <!-- checks:end -->
 
 ## Bring-up results

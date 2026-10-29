@@ -1,0 +1,29 @@
+ref,part,pins,pin_order,body_w,body_h,body_off_x,body_off_y,body_on_board,confidence,notes
+# EVERY PHYSICAL GUESS ON THIS BOARD LIVES HERE. Measure a module, edit its row, re-run
+# gen_proto.py. Nothing else needs touching.
+#
+#   pins        how many pins on its header
+#   pin_order   the functions in HEADER ORDER, pin 1 first, separated by |. If your module's
+#               silkscreen reads a different order, reorder this string - that is the whole fix.
+#               Function names must match the ones in gen_proto.py's NETS table for that ref.
+#   body_w/h    the module's outline in mm, which is usually BIGGER than its header. Drawn on
+#               F.Fab so overhang and collisions are visible in the render.
+#   body_off_x/y  where the body's top-left sits relative to header pin 1, in mm. Negative = the
+#               body starts left of / above pin 1.
+#   body_on_board  yes = the module sits on the board and its body must fit. no = only its HEADER
+#               is on the board and the module itself mounts to the enclosure wall on a short
+#               cable. SD, VGA, PS/2 and the OLED are 'no' because all four are things a user
+#               touches or looks at, so they belong on a wall, and with them on-board the module
+#               bodies collide (checks/body_check.py proved it: 7 collisions). Flip to yes and
+#               re-run to see that for yourself.
+#   confidence  MEASURED once you have calipers on it. DATASHEET if from a real datasheet.
+#               GUESSED otherwise - and a GUESSED row is why this board is not ready to build.
+J_SD,microSD SPI breakout,6,CS|SCK|MOSI|MISO|VCC|GND,42.0,24.0,-2.5,-2.5,no,GUESSED,PIN ORDER VARIES BY MODULE - check the silkscreen. Some are GND|VCC|MISO|MOSI|SCK|CS (reversed)
+J_OLED,SSD1306 128x64 0.96in,4,GND|VCC|SCL|SDA,27.0,27.0,-2.5,-2.5,no,GUESSED,Some modules are VCC|GND. I2C addr 0x3C per hw_config.h
+U_RAM1,PSRAM APS6404L on DIP-8 adapter,8,CE|SO|SIO2|VSS|SI|SCLK|SIO3|VCC,10.2,10.2,-1.3,-1.3,yes,DATASHEET,SOP-8 pinout is from the datasheet; the ADAPTER outline is guessed
+U_RAM2,PSRAM APS6404L on DIP-8 adapter,8,CE|SO|SIO2|VSS|SI|SCLK|SIO3|VCC,10.2,10.2,-1.3,-1.3,yes,DATASHEET,Same part as U_RAM1
+J_LVL_LV,BSS138 4ch level converter - LV side,6,LV|LV1|LV2|LV3|LV4|GND,16.0,13.0,-2.5,-2.5,yes,GUESSED,Body spans both headers; drawn once from the LV side
+J_LVL_HV,BSS138 4ch level converter - HV side,6,HV|HV1|HV2|HV3|HV4|GND,0,0,0,0,yes,GUESSED,Body drawn by J_LVL_LV - this row is the header only
+J_PS2,PS/2 socket breakout,4,DATA|CLK|5V|GND,30.0,30.0,-2.5,-2.5,no,GUESSED,SIZE COMPLETELY UNKNOWN - this is a placeholder. Measure before trusting the fit
+J_VGA,Serial Wombat PCB_0024 VGA breakout,6,VSYNC|HSYNC|R|G|B|GND,30.0,40.0,-2.5,-2.5,no,GUESSED,"Pin count inferred from PLAN.md ""six jumpers"". Series resistors stay ON this breakout"
+TB1,3-way screw terminal 2.54mm,3,5V|3V3|GND,15.0,10.0,-1.3,-1.3,yes,DATASHEET,Phoenix MPT-0 5-3-2.54 footprint is on-grid

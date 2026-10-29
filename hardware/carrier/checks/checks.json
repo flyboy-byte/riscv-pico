@@ -1,5 +1,7 @@
 [
+  {"name": "Pin map matches firmware hw_config.h", "cmd": ["python3", "checks/fw_pinmap_check.py"], "files": ["pinmap.csv"]},
   {"name": "Pads on the protoboard grid", "cmd": ["python3", "checks/grid_check.py", "carrier_proto.kicad_pcb"], "files": ["carrier_proto.kicad_pcb"]},
-  {"name": "DRC (errors)", "cmd": ["python3", "checks/kicad_check.py", "drc", "carrier_proto.kicad_pcb"], "files": ["carrier_proto.kicad_pcb"], "advisory": true},
+  {"name": "Module bodies do not collide", "cmd": ["python3", "checks/body_check.py"], "files": ["bodies.json", "modules.csv"]},
+  {"name": "DRC (unconnected = the wire list)", "cmd": ["python3", "checks/kicad_check.py", "drc", "carrier_proto.kicad_pcb"], "files": ["carrier_proto.kicad_pcb"], "advisory": true},
   {"name": "No hand edits waiting", "cmd": ["python3", "checks/drift.py", "check"], "files": []}
 ]

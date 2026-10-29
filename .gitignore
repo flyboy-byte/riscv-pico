@@ -35,3 +35,4 @@ upstream/pico-linux/linux/output
 # KiCad generated/working files in the carrier board project
 hardware/carrier/checks/out/
 hardware/carrier/*-backups/
+hardware/carrier/checks/last_run.json
