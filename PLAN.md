@@ -36,7 +36,8 @@ resized to 1600 px and stripped of metadata. The phone originals sit untracked i
 
 **Project on hold as of 2026-09-16.** The user considers it done until they resume, and asked for
 no growth in the meantime. Future directions they named, not started: **a perfboard build** of
-the same circuit, then **a 3D-printed enclosure** for it. The website became a blog-style story
+the same circuit (the plan for it is "Idea: carrier board" just below — start there, it holds the
+pin constraints and the power split), then **a 3D-printed enclosure** for it. The website became a blog-style story
 with photos; the build guide lives in the README ("Build one yourself": six steps, SD card, first
 boot, troubleshooting).
 
@@ -44,8 +45,9 @@ boot, troubleshooting).
 
 Moving the breadboard circuit onto one soldered board — protoboard or a single-layer custom PCB.
 Explored far enough to record the constraints, then parked; a browser fit/layout tool written for
-it was judged not worth keeping, so **this is an idea, not work in progress.** What a future
-attempt should start from:
+it was judged not worth keeping, so **this is an idea, not work in progress.** This section is the
+standing plan for the carrier board — it supersedes PR #1 (branch `docs/carrier-board-fit`), which
+is left open but should not be merged. What a future attempt starts from:
 
 | Group | Pico pins | Layout constraint |
 | --- | --- | --- |
