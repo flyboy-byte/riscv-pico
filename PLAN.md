@@ -40,6 +40,40 @@ the same circuit, then **a 3D-printed enclosure** for it. The website became a b
 with photos; the build guide lives in the README ("Build one yourself": six steps, SD card, first
 boot, troubleshooting).
 
+#### Idea: carrier board (not started, 2026-10-28)
+
+Moving the breadboard circuit onto one soldered board — protoboard or a single-layer custom PCB.
+Explored far enough to record the constraints, then parked; a browser fit/layout tool written for
+it was judged not worth keeping, so **this is an idea, not work in progress.** What a future
+attempt should start from:
+
+| Group | Pico pins | Layout constraint |
+| --- | --- | --- |
+| PSRAM x2 (SPI1) | GP10–GP14 | Most timing-sensitive bus (20 MHz). Keep shortest and tightest; stays on the Pico's 3V3 with local decoupling |
+| SD card (SPI0) | GP0, GP2, GP3, GP4 | MOSI and CLK cross over on the module's header |
+| VGA | GP16–GP20, GND pin 23 | Ground only, no power. Fast PIO pixel clock |
+| PS/2 | GP26, GP27 | 5 V bus via the BSS138: low side on Pico 3V3, high side on the external 5 V rail |
+| OLED (I2C0) | GP28, GP21 | Two separate jumpers — no adjacent pair is free |
+
+Pins are compiled into the firmware, so the layout routes around them, not the reverse. **The power
+split is load-bearing, not a preference:** SD and OLED on the separate 3.3 V supply, PSRAM on the
+Pico's 3V3, all grounds meeting at one point. Sharing one 3V3 node is what crashed boot on
+2026-08-29 — see the incident in HARDWARE_SCHEMATIC.md. The 5 V rail feeding VSYS (pin 39) also
+feeds the keyboard, and its source is the external supply, so a board needs a supply connector of
+its own.
+
+Boards considered: the ElectroCookie snappable board, 3.8 × 3.5 in (~96.5 × 88.9 mm, 0.1 in pitch,
+snaps into four) — retailer figure, confirm on the part, and its power rails are unconfirmed; or a
+160 × 100 mm Eurocard. Everything fits on the full ElectroCookie or the Eurocard; the half and
+quarter boards do not.
+
+First real step is measuring the actual modules — only the Pico's dimensions and pin positions are
+known exactly; the SD, OLED, PSRAM adapters, converter and especially the PS/2 breakout are all
+guesses. Then protoboard or custom: on protoboard there is no routing problem (0.1 in grid, wire
+and solder bridges), and for a custom board the `pcb-design` skill in `flyboy-byte/toolbox` does
+KiCad-from-code, single-layer Freerouting and a DRC that reports real crossings and lengths — which
+is the reason the hand-rolled fit tool wasn't worth keeping.
+
 **Moved out of the repo root 2026-09-16:** `c4-pico-extension-notes.md` (the user's ChatGPT notes on
 extending c4), the PS/2 pinout diagram `.webp` and the user's `ps2-pinout` wire note now live in
 `~/.riscv-pico-scratch/notes/`. The full-size phone photos are in `~/Pictures/riscv-pico/`.
