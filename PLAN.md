@@ -44,14 +44,28 @@ boot, troubleshooting).
 extending c4), the PS/2 pinout diagram `.webp` and the user's `ps2-pinout` wire note now live in
 `~/.riscv-pico-scratch/notes/`. The full-size phone photos are in `~/Pictures/riscv-pico/`.
 
-**Scratch pruned 2026-10-10.** `~/.riscv-pico-scratch` is down to 8.4 GB, nearly all of it the
-buildroot toolchain. Deleted: the finished harness test runs (`work/test*`, `work/quickstart-test`,
-`work/term`, `work/fsck`), `work/card-staging`, the Lua build tree, and the release staging dirs
-(`work/release-sdcard-v{1,2}`, `work/release-boards-v6`) — every release artifact is published and
-checksum-verified on the GitHub releases page, so paths like those mentioned further down this
-document are gone. **Kept:** `repo/buildroot` (the cross-compiler — never delete, it is hours to
-rebuild), `backups/sd-2026-09-{14,16}` (the card as it was, including the user's own files that
-ship in no release), `notes/`, and `work/{bin,c4,blink.lua,help.txt}`.
+**Scratch pruned 2026-10-10, pruned further 2026-10-22, now 791 MB.** Deleted on 10-10: the
+finished harness test runs (`work/test*`, `work/quickstart-test`, `work/term`, `work/fsck`),
+`work/card-staging`, the Lua build tree, and the release staging dirs (`work/release-sdcard-v{1,2}`,
+`work/release-boards-v6`) — every release artifact is published and checksum-verified on the GitHub
+releases page. Then on 2026-10-22, outside this project's sessions, buildroot's `output/build` and
+`output/staging` were emptied too, taking it from ~8 GB to 662 MB.
+
+**The cross-compiler still works.** `output/host/bin/riscv32-buildroot-linux-uclibc-gcc` survived
+the 10-22 prune and was re-verified 2026-10-28 compiling a C file to a valid BFLT with the recipe
+below. What is gone is the intermediate build tree, so a buildroot `make` of a *package* will
+re-extract and rebuild it; compiling your own source against the existing toolchain is unaffected.
+
+**Kept:** `repo/buildroot` (never delete — rebuilding the toolchain is hours),
+`backups/sd-2026-09-{14,16}` (the card as it was, including the user's own files that ship in no
+release), `notes/`, and all of `work/`, which is now just `bin/`, `c4/`, `blink.lua`, `help.txt`
+and `sd-install.cmds`.
+
+**Dead paths below.** Sections further down still name directories the prunes removed, left in
+place because the surrounding narrative is the record of how the card was built. Treat these as
+history, not as somewhere to copy from: `work/term/` (terminal captures and `drive.py`),
+`work/release-sdcard-v1/`, and `work/card-staging/` (the staged `ROOTFS`, which already went onto
+the card — the card itself and `backups/sd-2026-09-16/` are the surviving copies).
 
 **Upstream checked 2026-09-16: nothing new.** `pico-rv32ima` (e6f6d1b), `tiny-rv32ima` (565440c),
 `pico-linux` (5d4eda1), `tvlad1234/c4` (30b22b7) and `buildroot-tiny-rv32ima` (ad36342, same as the
@@ -742,8 +756,9 @@ preview from it, not the other way round.
      nobody's asked for it, purely speculative.
 
 **Reusable build environment for future kernel/rootfs rebuilds:** buildroot lives at
-`/home/logan/.riscv-pico-scratch/repo/buildroot` (~8GB, includes a working host toolchain — reuse
-this rather than re-cloning). **Hard lesson, worth reading before touching it again:** don't build
+`/home/logan/.riscv-pico-scratch/repo/buildroot` (662 MB since the 2026-10-22 prune, down from
+~8 GB; still includes the working host toolchain — reuse this rather than re-cloning, and see
+"Scratch pruned" at the top for what the prune removed). **Hard lesson, worth reading before touching it again:** don't build
 here from inside the session's tmpfs scratchpad (`/tmp/claude-*/.../scratchpad/`) — it's only 7.5GB
 and a full kernel+host-GCC build blows straight through it, locking up the shell tool itself (every
 command fails with ENOSPC on its own bookkeeping, not just the build). Build from real disk. Also:
